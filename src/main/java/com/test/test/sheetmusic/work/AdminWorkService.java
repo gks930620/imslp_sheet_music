@@ -1,0 +1,274 @@
+package com.test.test.sheetmusic.work;
+
+import com.test.test.common.dto.PageResponse;
+import com.test.test.common.exception.BusinessRuleException;
+import com.test.test.common.exception.DuplicateResourceException;
+import com.test.test.common.exception.EntityNotFoundException;
+import com.test.test.common.exception.FieldValidationException;
+import com.test.test.file.entity.FileEntity;
+import com.test.test.sheetmusic.common.ImslpUrlNormalizer;
+import com.test.test.sheetmusic.common.SearchNormalizer;
+import com.test.test.sheetmusic.composer.ComposerEntity;
+import com.test.test.sheetmusic.composer.repository.ComposerRepository;
+import com.test.test.sheetmusic.crawl.repository.CrawlItemRepository;
+import com.test.test.sheetmusic.edition.AdminEditionService;
+import com.test.test.sheetmusic.edition.EditionDtoAssembler;
+import com.test.test.sheetmusic.edition.EditionEntity;
+import com.test.test.sheetmusic.edition.dto.AdminEditionDTO;
+import com.test.test.sheetmusic.edition.repository.DownloadLogRepository;
+import com.test.test.sheetmusic.edition.repository.EditionRepository;
+import com.test.test.sheetmusic.work.dto.AdminWorkDetailDTO;
+import com.test.test.sheetmusic.work.dto.AdminWorkListDTO;
+import com.test.test.sheetmusic.work.dto.AdminWorkSummaryDTO;
+import com.test.test.sheetmusic.work.dto.AliasOverlapDTO;
+import com.test.test.sheetmusic.work.dto.ComposerRefDTO;
+import com.test.test.sheetmusic.work.dto.WorkSaveDTO;
+import com.test.test.sheetmusic.work.repository.WorkAliasRepository;
+import com.test.test.sheetmusic.work.repository.WorkRepository;
+import com.test.test.sheetmusic.work.repository.WorkSearchCondition;
+import com.test.test.sheetmusic.work.repository.WorkSortOrder;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/** 곡 관리 (02 §4-6 ~ §4-10). */
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class AdminWorkService {
+
+    private static final List<String> STATUS_VALUES =
+            List.of("READY", "PREPARING", "RESTRICTED", "UNKNOWN", "NEEDS_WORK", "HIDDEN");
+
+    private final WorkRepository workRepository;
+    private final WorkAliasRepository workAliasRepository;
+    private final ComposerRepository composerRepository;
+    private final EditionRepository editionRepository;
+    private final DownloadLogRepository downloadLogRepository;
+    private final CrawlItemRepository crawlItemRepository;
+    private final AdminEditionService adminEditionService;
+    private final EditionDtoAssembler editionDtoAssembler;
+
+    // ===== §4-6 목록 =====
+
+    public AdminWorkListDTO list(String q, String status, Long composerId, String level, Pageable pageable) {
+        if (status != null && !status.isBlank() && !STATUS_VALUES.contains(status)) {
+            throw new BusinessRuleException("상태 값이 올바르지 않아요: " + status);
+        }
+        WorkSearchCondition condition = WorkSearchCondition.builder()
+                .terms(SearchNormalizer.normalizeWords(q))
+                .wholeTerm(SearchNormalizer.normalize(q))
+                .composerId(composerId)
+                .includeHidden(true)
+                .statusFilter(status)
+                .levelNone("NONE".equalsIgnoreCase(level))
+                .levels("NONE".equalsIgnoreCase(level) ? List.of() : Level.parseCsv(level))
+                .sortOrder(WorkSortOrder.UPDATED)
+                .build();
+
+        Page<WorkEntity> page = workRepository.search(condition, pageable);
+        long unfilteredTotal = condition.hasFilters()
+                ? workRepository.count(condition.withoutFilters())
+                : page.getTotalElements();
+
+        List<Long> ids = page.getContent().stream().map(WorkEntity::getId).toList();
+        Map<Long, List<EditionEntity>> editionsByWork = groupEditions(ids);
+
+        List<AdminWorkSummaryDTO> content = new ArrayList<>();
+        for (WorkEntity work : page.getContent()) {
+            List<EditionEntity> editions = editionsByWork.getOrDefault(work.getId(), List.of());
+            content.add(AdminWorkSummaryDTO.builder()
+                    .id(work.getId())
+                    .titleKo(work.getTitleKo())
+                    .titleOriginal(work.getTitleOriginal())
+                    .composer(ComposerRefDTO.from(work.getComposer()))
+                    .catalogNumbers(work.getCatalogNumbers().stream()
+                            .map(WorkCatalogNumberEntity::getCatalogValue).toList())
+                    .level(work.getLevel())
+                    .editionCount(editions.size())
+                    .hasRecommended(work.getRecommendedEdition() != null)
+                    .status(work.status())
+                    .needsWork(work.needsWork())
+                    .hidden(work.isHidden())
+                    .updatedAt(work.getUpdatedAt())
+                    .build());
+        }
+
+        return AdminWorkListDTO.builder()
+                .unfilteredTotal(unfilteredTotal)
+                .works(PageResponse.<AdminWorkSummaryDTO>builder()
+                        .content(content)
+                        .page(page.getNumber())
+                        .size(page.getSize())
+                        .totalElements(page.getTotalElements())
+                        .totalPages(page.getTotalPages())
+                        .first(page.isFirst())
+                        .last(page.isLast())
+                        .build())
+                .build();
+    }
+
+    // ===== §4-7 상세 =====
+
+    public AdminWorkDetailDTO detail(Long id) {
+        return toDetail(findOrThrow(id));
+    }
+
+    // ===== §4-8 등록·수정 =====
+
+    @Transactional
+    public AdminWorkDetailDTO create(WorkSaveDTO request) {
+        validate(request);
+        ComposerEntity composer = composerRepository.findById(request.getComposerId())
+                .orElseThrow(() -> EntityNotFoundException.of("작곡가", request.getComposerId()));
+        String canonicalUrl = canonicalUrl(request.getImslpUrl());
+        requireUniqueUrl(canonicalUrl, null);
+
+        WorkEntity work = WorkEntity.builder()
+                .composer(composer)
+                .titleKo(request.getTitleKo())
+                .titleOriginal(request.getTitleOriginal())
+                .level(Level.parse(request.getLevel()))
+                .compositionYear(request.getCompositionYear())
+                .musicalKey(request.getMusicalKey())
+                .movements(request.getMovements())
+                .movementPageGuide(request.getMovementPageGuide())
+                .imslpUrl(canonicalUrl)
+                .hidden(request.isHidden())
+                .build();
+        work.replaceAliases(request.getAliases(), AliasSource.ADMIN);
+        work.replaceCatalogNumbers(request.getCatalogNumbers());
+        workRepository.save(work);
+        return toDetail(work);
+    }
+
+    @Transactional
+    public AdminWorkDetailDTO update(Long id, WorkSaveDTO request) {
+        validate(request);
+        WorkEntity work = findOrThrow(id);
+        ComposerEntity composer = composerRepository.findById(request.getComposerId())
+                .orElseThrow(() -> EntityNotFoundException.of("작곡가", request.getComposerId()));
+        String canonicalUrl = canonicalUrl(request.getImslpUrl());
+        requireUniqueUrl(canonicalUrl, id);
+
+        work.update(composer, request.getTitleKo(), request.getTitleOriginal(), Level.parse(request.getLevel()),
+                request.getCompositionYear(), request.getMusicalKey(), request.getMovements(),
+                request.getMovementPageGuide(), canonicalUrl, request.isHidden());
+        work.replaceAliases(request.getAliases(), AliasSource.ADMIN);
+        work.replaceCatalogNumbers(request.getCatalogNumbers());
+        return toDetail(work);
+    }
+
+    // ===== §4-9 삭제 =====
+
+    @Transactional
+    public void delete(Long id) {
+        WorkEntity work = findOrThrow(id);
+        List<EditionEntity> editions = editionRepository.findByWorkIdOrderByIdAsc(id);
+        adminEditionService.removeEditions(work, editions);
+        downloadLogRepository.deleteByWorkId(id);
+        crawlItemRepository.detachWork(id);
+        workRepository.delete(work);
+    }
+
+    // ===== §4-10 별칭 겹침 =====
+
+    public AliasOverlapDTO aliasOverlap(String alias, Long excludeWorkId) {
+        String normalized = SearchNormalizer.normalize(alias);
+        long count = 0L;
+        if (!normalized.isEmpty()) {
+            count = excludeWorkId == null
+                    ? workAliasRepository.countWorksWithAlias(normalized)
+                    : workAliasRepository.countOtherWorksWithAlias(normalized, excludeWorkId);
+        }
+        return AliasOverlapDTO.builder().alias(alias).overlapCount(count).build();
+    }
+
+    // ===== 내부 =====
+
+    private WorkEntity findOrThrow(Long id) {
+        return workRepository.findById(id).orElseThrow(() -> EntityNotFoundException.of("곡", id));
+    }
+
+    private Map<Long, List<EditionEntity>> groupEditions(List<Long> workIds) {
+        Map<Long, List<EditionEntity>> map = new LinkedHashMap<>();
+        if (workIds.isEmpty()) {
+            return map;
+        }
+        for (EditionEntity edition : editionRepository.findByWorkIds(workIds)) {
+            map.computeIfAbsent(edition.getWork().getId(), key -> new ArrayList<>()).add(edition);
+        }
+        return map;
+    }
+
+    private AdminWorkDetailDTO toDetail(WorkEntity work) {
+        List<EditionEntity> editions = editionRepository.findByWorkIdOrderByIdAsc(work.getId());
+        Long recommendedId = work.getRecommendedEdition() == null ? null : work.getRecommendedEdition().getId();
+        Long candidateId = EditionDtoAssembler.candidateOf(editions, recommendedId);
+        Map<Long, FileEntity> files = editionDtoAssembler.loadFiles(editions);
+
+        List<AdminEditionDTO> editionDtos = new ArrayList<>();
+        for (EditionEntity edition : EditionDtoAssembler.sortForAdmin(editions, recommendedId, candidateId)) {
+            editionDtos.add(editionDtoAssembler.toAdminDto(edition, files, recommendedId, candidateId));
+        }
+
+        return AdminWorkDetailDTO.builder()
+                .id(work.getId())
+                .titleKo(work.getTitleKo())
+                .titleOriginal(work.getTitleOriginal())
+                .composer(AdminWorkDetailDTO.Composer.from(work.getComposer()))
+                .catalogNumbers(work.getCatalogNumbers().stream()
+                        .map(WorkCatalogNumberEntity::getCatalogValue).toList())
+                .aliases(work.getAliases().stream().map(WorkAliasEntity::getAlias).toList())
+                .level(work.getLevel())
+                .compositionYear(work.getCompositionYear())
+                .musicalKey(work.getMusicalKey())
+                .movements(work.getMovements())
+                .movementPageGuide(work.getMovementPageGuide())
+                .imslpUrl(work.getImslpUrl())
+                .hidden(work.isHidden())
+                .hiddenReason(work.getHiddenReason())
+                .status(work.status())
+                .needsWork(work.needsWork())
+                .missing(work.missing())
+                .recommendedEditionId(recommendedId)
+                .candidateEditionId(candidateId)
+                .downloadCount(work.getDownloadCount())
+                .hasDownloadHistory(downloadLogRepository.existsByWorkId(work.getId()))
+                .editions(editionDtos)
+                .createdAt(work.getCreatedAt())
+                .updatedAt(work.getUpdatedAt())
+                .build();
+    }
+
+    private void validate(WorkSaveDTO request) {
+        if (request.getTitleOriginal() == null || request.getTitleOriginal().isBlank()) {
+            throw FieldValidationException.of("titleOriginal", "원어 제목을 입력해 주세요", request.getTitleOriginal());
+        }
+        if (request.getImslpUrl() != null && !request.getImslpUrl().isBlank()
+                && ImslpUrlNormalizer.canonicalize(request.getImslpUrl()) == null) {
+            throw FieldValidationException.of("imslpUrl", "IMSLP 작품 페이지 주소를 입력해 주세요", request.getImslpUrl());
+        }
+    }
+
+    private String canonicalUrl(String rawUrl) {
+        return (rawUrl == null || rawUrl.isBlank()) ? null : ImslpUrlNormalizer.canonicalize(rawUrl);
+    }
+
+    private void requireUniqueUrl(String canonicalUrl, Long selfId) {
+        if (canonicalUrl == null) {
+            return;
+        }
+        workRepository.findByImslpUrl(canonicalUrl).ifPresent(existing -> {
+            if (!existing.getId().equals(selfId)) {
+                throw new DuplicateResourceException("이미 등록된 IMSLP 주소예요");
+            }
+        });
+    }
+}
