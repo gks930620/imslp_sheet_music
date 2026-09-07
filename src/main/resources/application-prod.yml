@@ -1,0 +1,157 @@
+
+# Railway는 컨테이너가 반드시 주입된 PORT로 리슨해야 한다. 미주입 시(로컬 prod 테스트) 8080.
+server:
+  port: ${PORT:8080}
+  tomcat:
+    max-swallow-size: 110MB   # 초과 업로드 본문을 삼켜 413 JSON 이 도달하게 (03 §5)
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 100MB     # 악보 PDF 업로드 상한 (기획 §9 8-6, 03 §5)
+      max-request-size: 105MB  # 전체 요청 최대 크기
+
+  datasource:
+    # 운영 DB: Railway MySQL. 접속정보는 기본값을 두지 않는다(fail-fast) — 미설정 시 기동을 실패시켜
+    # 배포 설정 누락을 즉시 드러낸다. Railway 서비스 변수 예시(Reference Variables):
+    #   SPRING_DATASOURCE_URL=jdbc:mysql://${{MySQL.MYSQLHOST}}:${{MySQL.MYSQLPORT}}/${{MySQL.MYSQLDATABASE}}
+    #   SPRING_DATASOURCE_USERNAME=${{MySQL.MYSQLUSER}}
+    #   SPRING_DATASOURCE_PASSWORD=${{MySQL.MYSQLPASSWORD}}
+    url: ${SPRING_DATASOURCE_URL}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    defer-datasource-initialization: true  # JPA 초기화 후 SQL 실행
+    properties:
+      hibernate:
+        show_sql: false
+        format_sql: false
+        default_batch_fetch_size: 100
+        jdbc:
+          time_zone: UTC   # 새 엔티티 Instant 를 UTC 로 저장 (01_ERD §1)
+        # MySQL 8.x dialect
+        dialect: org.hibernate.dialect.MySQLDialect
+        # (제거됨) schema-generation.scripts.action=drop-and-create:
+        #   ddl-auto=update와 중복되고 create/drop-target 경로가 없어 기동 중 예외 위험이 있었음.
+        #   스키마는 ddl-auto(update) 또는 별도 마이그레이션 도구로 관리한다.
+    open-in-view: false
+    database-platform: org.hibernate.dialect.MySQLDialect
+
+  sql:
+    init:
+      encoding: UTF-8   # 컨벤션 §5-2
+      mode: never  # 운영에서 SQL 초기화 비활성화
+
+  devtools:
+    livereload:
+      enabled: false
+    restart:
+      enabled: false
+
+  security:
+    oauth2:
+      client:
+        registration:
+          kakao:
+            client-id: ${KAKAO_CLIENT_ID}
+            client-secret: ${KAKAO_CLIENT_SECRET}
+            client-authentication-method: client_secret_post
+            redirect-uri: ${APP_BASE_URL:http://localhost:8080}/login/oauth2/code/kakao
+            authorization-grant-type: authorization_code
+            scope:
+              - profile_nickname
+              - account_email
+
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            redirect-uri: ${APP_BASE_URL:http://localhost:8080}/login/oauth2/code/google
+            scope:
+              - profile
+              - email
+            authorization-grant-type: authorization_code
+        provider:
+          kakao:
+            authorization-uri: https://kauth.kakao.com/oauth/authorize
+            token-uri: https://kauth.kakao.com/oauth/token
+            user-info-uri: https://kapi.kakao.com/v2/user/me
+            user-name-attribute: id
+
+logging:
+  level:
+    root: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type: WARN
+    com.test.test: INFO   # 실제 애플리케이션 패키지 (기존 com.example 은 잘못된 값이라 무효였음)
+
+jwt:
+  secret: ${JWT_SECRET_KEY}
+  expiration_access: 1800000   # 30분
+  expiration_refresh: 14400000 # 4시간
+
+# 쿠키 보안 설정 (운영: HTTPS이므로 true)
+app:
+  cookie:
+    secure: true
+
+  timezone: Asia/Seoul
+
+  # 시드 적재: 운영은 sql.init 이 꺼져 있어도 로더가 돌아 첫 배포에 1회 적재, 이후 no-op (01_ERD §6)
+  seed:
+    enabled: ${SEED_ENABLED:true}
+
+  edition:
+    max-file-bytes: 104857600
+
+  # IMSLP 수집 (03 §3)
+  imslp:
+    request-interval-ms: ${IMSLP_REQUEST_INTERVAL_MS:2000}
+    file-wait-ms: ${IMSLP_FILE_WAIT_MS:15000}
+    user-agent: "SheetMusicKR/0.1 (+${APP_BASE_URL:https://your-domain.com}; contact: ${APP_CONTACT_EMAIL:})"
+  # WebSocket 허용 출처(CSWSH 방어). 운영 도메인으로 설정. 여러 개면 콤마로 구분.
+  websocket:
+    allowed-origins: ${APP_BASE_URL:https://your-domain.com}
+
+  # 파일 저장: Railway Storage Buckets(S3 호환) 사용 (§5-3).
+  # BUCKET_* 미설정 시 RailwayDeploymentValidator 가 기동을 실패(fail-fast)시킨다.
+  bucket:
+    endpoint: ${BUCKET_ENDPOINT:}
+    access-key-id: ${BUCKET_ACCESS_KEY_ID:}
+    secret-access-key: ${BUCKET_SECRET_ACCESS_KEY:}
+    name: ${BUCKET_NAME:}
+    region: ${BUCKET_REGION:us-east-1}
+
+  # orphan 파일 정리 유예시간(시간) — §5-3-1 ③
+  file:
+    orphan-grace-hours: ${ORPHAN_GRACE_HOURS:24}
+
+# Swagger/OpenAPI: 운영에서는 비활성화 (API 명세 비인증 노출 방지)
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# Actuator 설정 (서버 상태 모니터링)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: when_authorized
+
+# 파일 업로드 경로 (버킷 미설정 시 폴백. 운영은 버킷 사용이 표준)
+file:
+  upload-dir: ${FILE_UPLOAD_DIR:/app/uploads}
+

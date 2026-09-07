@@ -1,0 +1,114 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.3.4'
+	id 'io.spring.dependency-management' version '1.1.6'
+}
+
+group = 'com.imslp'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	 // 1. Querydsl 라이브러리 추가
+	implementation 'com.querydsl:querydsl-jpa:5.0.0:jakarta'
+	annotationProcessor "com.querydsl:querydsl-apt:5.0.0:jakarta"
+	annotationProcessor "jakarta.annotation:jakarta.annotation-api"
+	annotationProcessor "jakarta.persistence:jakarta.persistence-api"
+
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-websocket'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'  // Validation 추가
+
+	// IMSLP 작품 페이지 HTML 파싱 (docs/설계/03_기술결정.md §1)
+	implementation 'org.jsoup:jsoup:1.21.1'
+	// PDF 쪽수·첫 페이지 미리보기 PNG (03 §2)
+	implementation 'org.apache.pdfbox:pdfbox:3.0.5'
+	compileOnly 'org.projectlombok:lombok'
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+
+	// Railway Storage Buckets (S3 완전 호환) — 파일 저장 표준 (§5-3). BOM으로 버전 일괄 관리.
+	implementation platform('software.amazon.awssdk:bom:2.28.16')
+	implementation 'software.amazon.awssdk:s3'
+	implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
+	implementation 'io.jsonwebtoken:jjwt-impl:0.12.3'
+	implementation 'io.jsonwebtoken:jjwt-jackson:0.12.3'
+
+	// .env 파일 읽기용
+	implementation 'me.paulschwarz:spring-dotenv:4.0.0'
+
+	// Swagger (API 문서화)
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
+
+	// Actuator (서버 상태 모니터링)
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+	runtimeOnly 'com.mysql:mysql-connector-j'  // 배포(prod)용 MySQL 드라이버 (Railway MySQL)
+	runtimeOnly 'com.h2database:h2'  // 개발/테스트용 인메모리 DB (외부 DB 불필요). 배포는 prod 프로파일에서 Railway MySQL 사용
+
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.security:spring-security-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// 2. QClass 생성 위치 설정 (선택 사항이지만 관리하기 편함)
+def querydslDir = "src/main/generated"
+
+def frontendDir = file("${projectDir}/frontend")
+def frontendBuildDir = file("${frontendDir}/dist")
+def staticDir = file("${projectDir}/src/main/resources/static")
+def npmExecutable = org.gradle.internal.os.OperatingSystem.current().isWindows() ? "npm.cmd" : "npm"
+
+tasks.register("frontendInstall", Exec) {
+	workingDir frontendDir
+	commandLine npmExecutable, "ci"
+	onlyIf { frontendDir.exists() }
+}
+
+tasks.register("frontendBuild", Exec) {
+	dependsOn "frontendInstall"
+	workingDir frontendDir
+	commandLine npmExecutable, "run", "build"
+	onlyIf { frontendDir.exists() }
+}
+
+tasks.register("cleanFrontendStatic", Delete) {
+	delete fileTree(staticDir) {
+		exclude ".gitkeep"
+	}
+}
+
+tasks.register("copyFrontendBuild", Copy) {
+	dependsOn "frontendBuild", "cleanFrontendStatic"
+	from frontendBuildDir
+	into staticDir
+	onlyIf { frontendDir.exists() }
+}
+
+tasks.named("processResources") {
+	dependsOn "copyFrontendBuild"
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

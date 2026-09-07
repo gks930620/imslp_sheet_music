@@ -1,0 +1,165 @@
+dotenv:
+  enabled: true  # .env파일설정.    KAKAO_CLIENT_ID 직접 쓰려면 없어도됨.
+
+
+spring:
+  # 페이징 상한(DoS 방어): ?size=1000000 같은 과대 요청을 막는다.
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+
+  servlet:
+    multipart:
+      max-file-size: 100MB     # 악보 PDF 업로드 상한 (기획 §9 8-6, 03 §5)
+      max-request-size: 105MB  # 전체 요청 최대 크기
+
+  # 개발(dev)은 인메모리 H2(MySQL 호환) 사용 → 로컬에 MariaDB 없어도 실행됨. 배포는 prod 프로파일에서 MySQL.
+  datasource:
+    url: jdbc:h2:mem:devdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true   # http://localhost:8080/h2-console (JDBC URL: jdbc:h2:mem:devdb)
+
+  jpa:
+    hibernate:
+      ddl-auto: create
+    defer-datasource-initialization: true # data-users.sql 실행 시점 조정 (DDL 후 실행)
+    properties:
+      hibernate:
+        show_sql: true
+        format_sql: true
+        default_batch_fetch_size: 100
+        jdbc:
+          time_zone: UTC   # 새 엔티티 Instant 를 H2/MySQL 모두 UTC 로 저장 (01_ERD §1)
+    open-in-view: false
+
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8   # 시드 .sql 을 UTF-8 로 읽는다 (컨벤션 §5-2)
+      data-locations:
+        - classpath:data-users.sql
+        - classpath:data-user-roles.sql
+        - classpath:data-files.sql
+        - classpath:data-community.sql
+        - classpath:data-comment.sql
+        - classpath:data-rooms.sql
+        - classpath:data-h2-reset-identity.sql
+
+  devtools:
+    livereload:
+      enabled: true
+    restart:
+      enabled: true
+
+
+  security:
+    oauth2:
+      client:
+        registration:
+          kakao:
+            client-id: ${KAKAO_CLIENT_ID}  # 카카오 REST API 키
+            client-secret: ${KAKAO_CLIENT_SECRET:}  # 카카오 Client Secret (콘솔에서 사용 설정 시 .env에 채울 것, 미사용 앱은 빈 값 허용)
+            client-authentication-method: client_secret_post  # 카카오는 POST 방식으로 Secret 전달
+            redirect-uri: http://localhost:8080/login/oauth2/code/kakao # 카카오 로그인 후 리디렉트될 주소
+            authorization-grant-type: authorization_code  # OAuth2 인증 방식 (코드 방식)
+            scope:
+              - profile_nickname
+              - account_email  # 요청할 사용자 정보 (이메일, 닉네임)
+
+
+          google: # ✅ 구글 OAuth2 추가
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}   #구글은 인가코드- access_token 과정에서 내부적으로 secret을 필요로 함.
+            redirect-uri: http://localhost:8080/login/oauth2/code/google
+            scope:
+              - profile       #카카오는 profile안의 여러정보 다 따로 지정해줘야하지만 구글은 profile만 지정하면 됨.
+              - email
+            authorization-grant-type: authorization_code
+        provider:
+          kakao:
+            authorization-uri: https://kauth.kakao.com/oauth/authorize  # 카카오 로그인 URL  (인증서버)
+            token-uri: https://kauth.kakao.com/oauth/token  # 액세스 토큰 요청 URL (인증서버)
+            user-info-uri: https://kapi.kakao.com/v2/user/me  # 사용자 정보 요청 URL (리소스서버)
+            user-name-attribute: id  # OAuth2User에서 사용할 식별 값. 왠만하면 oauth에서 제공하는대로사용하자. 카카오는 id, 구글은 sub
+logging:
+  level:
+    org.hibernate.SQL: debug
+    org.hibernate.type: trace
+
+jwt:
+  secret : ${JWT_SECRET_KEY}
+  #키는 길이만 충분하고 노출되지만 않으면 됨. gpt한테 만들어하던가 내가 막 타자 아무렇게 해도됨
+  expiration_access:  1800000 #30분 테스트용 1800000    30초=30000
+  expiration_refresh : 14400000   #테스트용 4시간
+
+# 초과 요청 본문을 삼켜야 413 JSON 이 클라이언트에 도달한다 (03 §5)
+server:
+  tomcat:
+    max-swallow-size: 110MB
+
+# 쿠키 보안 설정 (로컬: HTTP이므로 false)
+app:
+  cookie:
+    secure: false
+
+  # "이번 달 다운로드" 등 달력 경계 기준 시간대 (03 §11)
+  timezone: Asia/Seoul
+
+  # 시드(작곡가 25·곡 50 CSV) 적재 — 매 기동 멱등·삽입 전용 (01_ERD §6, 03 §8)
+  seed:
+    enabled: ${SEED_ENABLED:true}
+
+  # 판본 PDF 업로드 상한(바이트) — multipart 상한과 별개로 서비스에서 한 번 더 검사 (03 §5)
+  edition:
+    max-file-bytes: 104857600
+
+  # IMSLP 수집 (03 §3). robots Crawl-delay 2초, 파일 대기 페이지 15초 준수.
+  imslp:
+    request-interval-ms: 2000
+    file-wait-ms: 15000
+    user-agent: "SheetMusicKR/0.1 (+${APP_BASE_URL:http://localhost:8080}; contact: ${APP_CONTACT_EMAIL:gks9306202@gmail.com})"
+
+  # Railway Storage Buckets(S3 호환) 설정 (§5-3).
+  # endpoint 가 비어 있으면(로컬 개발) LocalFileStorage 로 폴백 → 코드 변경 없이 로컬/운영 동작.
+  bucket:
+    endpoint: ${BUCKET_ENDPOINT:}
+    access-key-id: ${BUCKET_ACCESS_KEY_ID:}
+    secret-access-key: ${BUCKET_SECRET_ACCESS_KEY:}
+    name: ${BUCKET_NAME:}
+    region: ${BUCKET_REGION:us-east-1}
+
+  # orphan 파일 정리 유예시간(시간) — §5-3-1 ③
+  file:
+    orphan-grace-hours: ${ORPHAN_GRACE_HOURS:24}
+
+# Actuator 설정 (서버 상태 모니터링)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics  # 노출할 엔드포인트
+  endpoint:
+    health:
+      show-details: when_authorized  # 인증된 사용자만 상세 정보
+
+# Swagger 설정
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html  # Swagger UI 경로
+    tags-sorter: alpha      # 태그 알파벳 순 정렬
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+# 파일 업로드 경로 (로컬 폴백 저장소 — 버킷 미설정 시 사용)
+# ⚠️ 키(file.upload-dir)는 그대로 유지 — 테스트가 이 키로 ./build/test-uploads 를 주입한다.
+file:
+  upload-dir: ${FILE_UPLOAD_DIR:./uploads}    # 프로젝트 루트/uploads
+
