@@ -1,0 +1,123 @@
+import { screen } from "@testing-library/react";
+import { WorkCard } from "./WorkCard.jsx";
+import { renderWithProviders } from "../../test/renderWithProviders.jsx";
+import { workSummary, workMoonlight } from "../../test/fixtures.js";
+import { expectNoText, expectText } from "../../test/text.js";
+
+// 00_공통_레이아웃_토큰.md §3-2 곡 카드, §3-3 난이도 칩, §3-4 상태 뱃지
+
+describe("WorkCard (full)", () => {
+  it("카드 전체가 곡 상세 링크다", () => {
+    renderWithProviders(<WorkCard work={workMoonlight} />);
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/works/21");
+  });
+
+  it("한국어 제목·원어 제목·작곡가(원어)·작품번호·쪽수를 보여준다", () => {
+    renderWithProviders(<WorkCard work={workMoonlight} />);
+    expect(screen.getByText("월광 소나타")).toBeInTheDocument();
+    expect(screen.getByText("Piano Sonata No.14, Op.27 No.2")).toBeInTheDocument();
+    expectText("베토벤 (Beethoven, Ludwig van)");
+    expectText("Op.27 No.2");
+    expectText("14쪽");
+  });
+
+  it("작품번호가 여러 개면 ' · ' 로 잇는다", () => {
+    renderWithProviders(<WorkCard work={workSummary({ catalogNumbers: ["Op.27 No.2", "WoO 59"] })} />);
+    expectText("Op.27 No.2 · WoO 59");
+  });
+
+  it.each([
+    ["BEGINNER", "입문"],
+    ["ELEMENTARY", "초급"],
+    ["INTERMEDIATE", "중급"],
+    ["ADVANCED", "고급"],
+    [null, "난이도 미정"],
+  ])("난이도 %s → 칩 '%s'", (level, label) => {
+    renderWithProviders(<WorkCard work={workSummary({ level })} />);
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it("READY 는 상태 뱃지가 없다", () => {
+    renderWithProviders(<WorkCard work={workSummary({ status: "READY" })} />);
+    expectNoText("준비 중");
+    expectNoText("한국에서 이용 제한");
+    expectNoText("저작권 확인 중");
+    expectNoText("자유 이용 가능");
+  });
+
+  it.each([
+    ["PREPARING", "준비 중"],
+    ["RESTRICTED", "한국에서 이용 제한"],
+    ["UNKNOWN", "저작권 확인 중"],
+  ])("상태 %s → 뱃지 '%s'", (status, label) => {
+    renderWithProviders(<WorkCard work={workSummary({ status })} />);
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it("별칭으로 걸리면 \"'월광'으로 찾음\" 줄이 보인다", () => {
+    renderWithProviders(<WorkCard work={workSummary({ matchedAlias: "월광" })} />);
+    expect(screen.getByText("'월광'으로 찾음")).toBeInTheDocument();
+  });
+
+  it("별칭 일치가 아니면 그 줄이 없다", () => {
+    renderWithProviders(<WorkCard work={workSummary({ matchedAlias: null })} />);
+    expectNoText("으로 찾음");
+  });
+
+  it("추천 판본이 없으면 쪽수를 표시하지 않는다", () => {
+    renderWithProviders(<WorkCard work={workSummary({ pageCount: null, fileSize: null, previewUrl: null })} />);
+    expect(document.body.textContent).not.toMatch(/\d+쪽/);
+  });
+
+  it("한국어 제목이 없으면 원어 제목을 제목 자리에 쓰고 원어 줄은 생략한다", () => {
+    renderWithProviders(<WorkCard work={workSummary({ titleKo: null })} />);
+    expect(screen.getAllByText("Piano Sonata No.14, Op.27 No.2")).toHaveLength(1);
+  });
+
+  it("작곡가 한글 표기가 없으면 원어만 쓴다", () => {
+    renderWithProviders(<WorkCard work={workSummary({ composer: { id: 4, nameKo: null, nameOriginal: "Beethoven, Ludwig van" } })} />);
+    expectText("Beethoven, Ludwig van");
+    expectNoText("null");
+    expectNoText("(Beethoven");
+  });
+
+  it("hideComposer 면 작곡가 줄을 빼고 작품번호만 (작곡가 상세 화면)", () => {
+    renderWithProviders(<WorkCard work={workMoonlight} hideComposer />);
+    expectNoText("베토벤");
+    expectText("Op.27 No.2");
+  });
+
+  it("미리보기가 없어도 자리는 둔다 (music_note 아이콘), '미리보기 준비 중' 글자는 없다", () => {
+    renderWithProviders(<WorkCard work={workSummary({ previewUrl: null })} />);
+    expect(screen.getByText("music_note")).toBeInTheDocument();
+    expectNoText("미리보기 준비 중");
+  });
+
+  it("미리보기가 있으면 이미지를 보여준다", () => {
+    renderWithProviders(<WorkCard work={workMoonlight} />);
+    expect(screen.getByRole("img")).toHaveAttribute("src", "/uploads/3f2a-c1.png");
+  });
+});
+
+describe("WorkCard (compact — 홈 인기곡·같은 작곡가의 다른 곡)", () => {
+  it("순위 · 한국어 제목 · 작곡가 · 난이도 칩 한 줄, 원어 제목 없음", () => {
+    renderWithProviders(<WorkCard work={workMoonlight} variant="compact" rank={1} />);
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("월광 소나타")).toBeInTheDocument();
+    expectText("베토벤");
+    expect(screen.getByText("중급")).toBeInTheDocument();
+    expect(screen.queryByText("Piano Sonata No.14, Op.27 No.2")).not.toBeInTheDocument();
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/works/21");
+  });
+
+  it("상태 뱃지는 compact 에서도 보인다", () => {
+    renderWithProviders(<WorkCard work={workSummary({ status: "PREPARING" })} variant="compact" />);
+    expect(screen.getByText("준비 중")).toBeInTheDocument();
+  });
+
+  it("rank 를 안 주면 순위 숫자가 없다 (같은 작곡가의 다른 곡)", () => {
+    renderWithProviders(<WorkCard work={workMoonlight} variant="compact" hideComposer />);
+    expectNoText("베토벤");
+    expect(screen.queryByText("1")).not.toBeInTheDocument();
+  });
+});

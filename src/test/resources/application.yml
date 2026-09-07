@@ -1,0 +1,88 @@
+spring:
+  # 페이징 상한(운영과 동일 파리티) — 테스트 프로파일 yml이 main을 shadow하므로 여기에도 명시.
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 105MB
+
+  # 통합 테스트는 외부 MariaDB 없이 인메모리 H2(MySQL 호환 모드)로 실행
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop # 테스트 시작 시 생성, 종료 시 삭제
+    defer-datasource-initialization: true
+    properties:
+      hibernate:
+        format_sql: true
+        show_sql: true
+        default_batch_fetch_size: 100
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8   # 시드 .sql 을 UTF-8 로 읽는다 (컨벤션 §5-2)
+      data-locations:
+        - classpath:data-users.sql
+        - classpath:data-user-roles.sql
+        - classpath:data-files.sql
+        - classpath:data-community.sql
+        - classpath:data-comment.sql
+        - classpath:data-rooms.sql
+        # H2: 명시 ID INSERT는 IDENTITY 시퀀스를 안 올리므로, 신규 INSERT PK 충돌 방지용 리셋 (test 전용)
+        - classpath:data-h2-reset-identity.sql
+
+  security:
+    oauth2:
+      client:
+        registration:
+          kakao:
+            client-id: test-kakao-id
+            client-secret: test-kakao-secret
+            client-authentication-method: client_secret_post
+            redirect-uri: http://localhost:8080/login/oauth2/code/kakao
+            authorization-grant-type: authorization_code
+            scope:
+              - profile_nickname
+              - account_email
+        provider:
+          kakao:
+            authorization-uri: https://kauth.kakao.com/oauth/authorize
+            token-uri: https://kauth.kakao.com/oauth/token
+            user-info-uri: https://kapi.kakao.com/v2/user/me
+            user-name-attribute: id
+
+server:
+  tomcat:
+    max-swallow-size: 110MB
+
+jwt:
+  secret: testSecretKeyShouldBeLongEnoughToSatisfyRequirements1234567890
+  expiration_access: 1800000
+  expiration_refresh: 14400000
+
+app:
+  timezone: Asia/Seoul
+  # 테스트도 시드를 적재한다 — 검색 인수조건("월광" → 소나타 14번)을 실제 시드로 검증 (01_ERD §6)
+  seed:
+    enabled: true
+  edition:
+    max-file-bytes: 104857600
+  # 테스트는 IMSLP 를 치지 않는다(FakeImslpClient). 대기 시간은 0 으로.
+  imslp:
+    request-interval-ms: 0
+    file-wait-ms: 0
+    user-agent: "SheetMusicKR/test (+http://localhost; contact: test@example.com)"

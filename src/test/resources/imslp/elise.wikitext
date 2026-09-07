@@ -1,0 +1,682 @@
+{{#fte:imslppage
+
+| *****AUDIO***** =
+{{#fte:imslpaudio
+|File Name 1=PMLP14377-German_Kitkin_-_Bagatelle_in_A_Minor,_WoO_59_-_Fu-r_Elise.flac
+|File Description 1=Complete Performance
+|Performers=
+|Performer Categories=Kitkin, German=piano
+|Uploader=[[User:Levkitkin|Levkitkin]]
+|Date Submitted=2024/8/27
+|Publisher Information=Lev Kitkin, 2024.
+|Copyright=Creative Commons Attribution 4.0
+|Thumb Filename=TN-PMLP14377-German_Kitkin_-_Bagatelle_in_A_Minor,_WoO_59_-_Fu-r_Elise-282.jpg
+|Misc. Notes=
+}}
+{{#fte:imslpaudio
+|File Name 1=PMLP14377-07_-_Beethoven_-_Fur_Elise.mp3
+|File Description 1=Complete Performance
+|Performers=
+|Performer Categories=Bradley-Fulgoni, Peter=piano
+|Uploader=[[User:Lumineux|Lumineux]]
+|Date Submitted=2016/3/18
+|Publisher Information=Peter Bradley-Fulgoni
+|Copyright=Creative Commons Attribution-NonCommercial-NoDerivs 4.0
+|Misc. Notes=Recorded 2015 in St. Paul's Hall, Huddersfield University (Peter Hill, sound engineer)
+}}
+{{#fte:imslpaudio
+|File Name 1=PMLP14377-Output_1-2.mp3
+|File Description 1=Complete Performance
+|Performers=
+|Performer Categories=Renzi, Simone=piano
+|Uploader=[[User:Thesimon|Thesimon]]
+|Date Submitted=2013/11/3
+|Publisher Information=Simone Renzi
+|Copyright=Creative Commons Attribution-NonCommercial 3.0
+|Misc. Notes=
+}}
+{{#fte:imslpaudio
+|File Name 1=PMLP14377-Beethoven_Für_Elise_WoO_59.mp3
+|File Description 1=Complete Performance
+|Performers=
+|Performer Categories=Kolodin, Luis=piano
+|Uploader=[[User:Cypressdome|Cypressdome]]
+|Date Submitted=2013/8/15
+|Publisher Information={{Sarro}}
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Thumb Filename=Sarro_Beethoven.jpg
+|Misc. Notes=
+}}
+{{#fte:imslpaudio
+|File Name 1=PMLP14377-für-elise-PIANO.mp3
+|File Description 1=Complete Performance
+|Performers=
+|Performer Categories=Smith, Paul Henry=piano
+|Uploader=[[User:Paulhenrysmith|Paulhenrysmith]]
+|Date Submitted=2011/1/16
+|Publisher Information=Paul Henry Smith
+|Copyright=Creative Commons Attribution Non-commercial 3.0
+|Misc. Notes=
+}}
+{{#fte:imslpaudio
+|File Name 1=PMLP14377-Beethoven_-_Bagatela_WoO_59_'Für_Elise'.mp3
+|File Description 1=Incomplete Performance
+|Performers=
+|Performer Categories=Jank, Fritz=piano
+|Uploader=[[User:Lucas-coelho|Lucas-coelho]]
+|Date Submitted=2021/6/6
+|Publisher Information=Recorded at Theatro Municipal de São Paulo, February 22, 1962.
+|Copyright=Public Domain
+|Misc. Notes=The recording begins at measure 13(b).<br>Source: {{YT|tVEA7knFAXs|Instituto Piano Brasileiro}}
+}}
+
+===Synthesized/MIDI===
+{{#fte:imslpaudio
+|File Name 1=PMLP14377-Fur_Elise_-_Bagatelle_In_A_Minor.mp3
+|File Description 1=Synthesized Performance
+|Performers=Sriram A
+|Performer Categories=
+|Uploader=[[User:Sriram|Sriram]]
+|Date Submitted=2017/5/19
+|Publisher Information=Sriram A, 2017.
+|Copyright=Creative Commons Attribution-NonCommercial-NoDerivs 4.0
+|Misc. Notes=Recorded 2017 (Using Digital Piano/Computer/Digital Recorder)
+}}
+{{#fte:imslpaudio
+|File Name 1=WIMA.4390-FurElise-WoO59.mid
+|File Description 1=Synthesized Performance
+|Performers=MIDI
+|Performer Categories=
+|Uploader=[[User:Reccmo|Reccmo]]
+|Date Submitted=2012/5/15
+|Publisher Information=Robert Lavigne
+|Copyright=Creative Commons Attribution Non-commercial Share Alike 3.0
+|Misc. Notes={{WIMAProject}}
+}}
+=====For Orchestra (Rondeau)=====
+{{#fte:imslpaudio
+|File Name 1=WIMA.8982-FESco.mp3
+|File Description 1=Virtual Performance
+|Performers=MIDI
+|Performer Categories=
+|Uploader=[[User:Michrond|Michrond]]
+|Date Submitted=2012/5/1
+|Publisher Information=Michel Rondeau
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes={{WIMAProject}}
+}}
+=====For 2 Trumpets (Tuk)=====
+{{#fte:imslpaudio
+|File Name 1=PMLP14377-Fur_Elise_-A_Conversation_for_2_trumpets.mp3
+|File Description 1=Synthesized Performance
+|Performers=MIDI
+|Performer Categories=
+|Uploader=[[User:Leentuk|Leentuk]]
+|Date Submitted=2018/12/31
+|Publisher Information=Leen Tuk
+|Copyright=Creative Commons Attribution 4.0
+|Misc. Notes=Fur Elise - A Conversation for Two Trumpets
+}}
+
+| *****FILES***** =
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven-WoO.059nohl1867.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Ludwig|Nohl|1831|1885}}<br>{{FE}}
+|Image Type=Normal Scan
+|Scanner={{BeethBonn}}
+|Uploader=[[User:Feduol|Feduol]]
+|Date Submitted=2011/6/1
+|Publisher Information=''Neue Briefe Beethovens'' (pp.28-33)<br>{{P|Cotta|J.G. Cotta|Stuttgart||1867||}}
+|Copyright=Public Domain
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven,_Ludwig_van-Werke_Breitkopf_Kalmus_Band_32_B298_WoO_59_scan.pdf
+|File Name 2=PMLP14377-Beethoven,_L._van_-_Clavierstuck_in_A_moll_'Fu-r_Elise',_WoO_59.pdf
+|File Description 1=Complete Score
+|File Description 2=Complete Score
+|Editor=
+|Image Type=Normal Scan
+|Scanner 1=Piupianissimo
+|Scanner 2=
+|Uploader 1=[[User:Piupianissimo|Piupianissimo]]
+|Uploader 2=[[User:M.kowalski49|M.kowalski49]]
+|Date Submitted 1=2014/3/15
+|Date Submitted 2=2025/9/29
+|Publisher Information={{BeethovenComplete|25|298|1888|354-56}}
+|Copyright=Public Domain
+|Misc. Notes=
+|Amazon={{AmazonLinks|0486466132|Dover vol. (reprint)}}
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-tiff2pdf_(2).pdf
+|File Description 1=Complete Score
+|Editor=
+|Image Type=Normal Scan
+|Scanner={{JagU|511484}}
+|Uploader=[[User:Feduol|Feduol]]
+|Date Submitted=2022/7/19
+|Publisher Information={{P|S. A. Krzyżanowski||Kraków|n.d.(ca.1890)|||S.A.K. 288}}
+|Copyright=Public Domain
+|Misc. Notes={{SubmissionProject}}
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven.WoO59.Fur.Elise.pdf
+|File Description 1=Complete Score
+|Editor=
+|Image Type=Normal Scan
+|Scanner=
+|Uploader=[[User:Ermak|Ermak]]
+|Date Submitted=2016/5/2
+|Publisher Information=''Nouvelle répértoire: Collection des pièces modernes et classiques'', No.94<br>{{P|Bessel|W. Bessel & Co.|St. Petersburg||||6051}}
+|Copyright=Public Domain
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_Fur_Elise.pdf
+|File Description 1=Complete Score
+|Editor=
+|Image Type=Normal Scan
+|Scanner={{BNF}}
+|Uploader=[[User:Morel|Morel]]
+|Date Submitted=2019/12/5
+|Publisher Information={{AlbMus|32|1905|}}
+|Copyright=Public Domain
+|Thumb Filename=TN-PMLP14377-Beethoven_Fur_Elise-8249.png
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-wier_ihml_5.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Albert Ernest|Wier|1879|1945}}
+|Image Type=Normal Scan
+|Scanner={{IArchS|idealhomemusicli01unse}}
+|Uploader=[[User:Feduol|Feduol]]
+|Date Submitted=2025/4/30
+|Publisher Information=[[The Ideal Home Music Library (Wier, Albert Ernest)|''The Ideal Home Music Library'']], Vol.1 (pp.13-15)<br>{{P|Scribner|Charles Scribner's Sons|New York|1913|||}}
+|Copyright=Public Domain
+|Thumb Filename=Wier_the_ideal_home_music_library.jpg
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Fuer_E.pdf
+|File Description 1=Complete Score
+|Editor=
+|Image Type=Normal Scan
+|Scanner=noen-apitz.de
+|Uploader=[[User:Mapitz|Mapitz]]
+|Date Submitted=2020/3/27
+|Publisher Information=''[[Blätter und Blüten|Blätter und Blüten für das Pianoforte]]''<br>{{P|Litolff|Henry Litolff|Braunschweig|n.d.[1915]|||12676}}
+|Copyright=Public Domain
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=Ludwig_van_Beethoven_-_Fuer_Elise.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Albert Ernest|Wier|1879|1945}}
+|Image Type=Normal Scan
+|Scanner=
+|Uploader=[[User:Kdkeller|Kdkeller]]
+|Date Submitted=2007/5/13
+|Publisher Information={{LinkWork|Masterpieces of Piano Music||Wier|Albert Ernest|0}} (pp.48-50)<br>{{P|Albert E. Wier||New York||||1918}}
+|Copyright=Public Domain
+|Thumb Filename=Wier_master_piano_cv.jpg
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-lanning_mbm_56.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Russell E.|Lanning|1916|1958}}
+|Image Type=Normal Scan
+|Scanner={{IArch}}
+|Uploader=[[User:Feduol|Feduol]]
+|Date Submitted=2024/8/10
+|Publisher Information=''Music by the Masters''. No.56<br>{{P|Musicord Publications||New York|1946|||EL 2543}}
+|Copyright=Public Domain
+|Thumb Filename=Lanning_mbm.jpg
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_Fur_Elise,_WoO_59.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Otto von|Irmer|1903|1992}}<br>{{LinkEd|Walther|Lampe|1872|1964}}, ''fingerings''
+|Image Type=Normal Scan
+|Scanner=Pfsunmin
+|Uploader=[[User:Pfsunmin|Pfsunmin]]
+|Date Submitted=2022/10/6
+|Publisher Information={{P|G. Henle Verlag||Munich||1950||H.N. 128}}
+|Copyright=Public Domain
+|Thumb Filename=Beethoven_Fur_Elise,_WoO_59.jpg
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_klavierstucke_henle_pp.165-167.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Otto von|Irmer|1903|1992}}<br>{{LinkEd|Walther|Lampe|1872|1964}}, ''fingerings''
+|Image Type=Normal Scan
+|Scanner=
+|Uploader=[[User:Feduol|Feduol]]
+|Date Submitted=2025/5/2
+|Publisher Information={{P|G. Henle Verlag||Munich||1958||H.N. 12}}
+|Reprint=''Beethoven: Klavierstücke'', No.30 (pp.165-167)<br>{{P|G. Henle Verlag||Munich||1986||}}
+|Copyright=Public Domain
+|Thumb Filename=Beethoven_klavierstucke_henle.jpg
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Fur_Elise_WoO59_(1810).pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|I.|Ryabov}}
+|Image Type=Normal Scan
+|Scanner=
+|Uploader=[[User:Inquiring|Inquiring]]
+|Date Submitted=2018/3/10
+|Publisher Information={{P|Muzgiz|Muzychna Ukraina|Kiev||1975||}}
+|Copyright=Public Domain
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-beethoven_leichte_klavierstucke_und_tanze_11.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Michael|Töpel|1958|}}
+|Image Type=Normal Scan
+|Scanner=
+|Uploader=[[User:Feduol|Feduol]]
+|Date Submitted=2024/8/1
+|Publisher Information=''Ludwig van Beethoven: Leichte Klavierstücke und Tänze'', No.11<br>{{P|Bärenreiter||Kassel|1996|||BA 6560}} {{Urtext}}
+|Copyright=Public Domain
+|Thumb Filename=TN-PMLP30934-beethoven_leichte_klavierstucke_und_tanze_1-2234.jpg
+|Misc. Notes=This file does not include editorial fingerings.
+}}
+{{#fte:imslpfile
+|File Name 1=Fur_Elise_WoO59.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Stelios|Samelis}}
+|Image Type=Typeset
+|Scanner=editor
+|Uploader=[[User:Link0007|Link0007]]
+|Date Submitted=2007/8/8
+|Publisher Information={{Mutopia|931|2015}}
+|Copyright=Public Domain (dedicated)
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Für_Elise.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Yair I}}
+|Image Type=Typeset
+|Scanner=editor
+|Uploader=[[User:Yair I|Yair I]]
+|Date Submitted=2011/6/1
+|Publisher Information=Yair I
+|Copyright=Creative Commons Attribution Non-commercial Share Alike 3.0
+|Thumb Filename=TN-Für Elise YairI.jpg
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=WIMA.a4f8-FurElise-WoO59.pdf
+|File Name 2=WIMA.0c6c-FurElise-WoO59.zip
+|File Description 1=Complete Score
+|File Description 2=Engraving files (Sibelius)
+|Editor={{LinkEd|Robert|Lavigne}}
+|Image Type=Typeset
+|Scanner=editor
+|Uploader=[[User:Reccmo|Reccmo]]
+|Date Submitted=2012/5/15
+|Publisher Information=Robert Lavigne
+|Copyright=Creative Commons Attribution Non-commercial Share Alike 3.0
+|Misc. Notes={{WIMAProject}}
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-BEETHOVEN_-_FUR_ELISE_(JF_EDITION).pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Jonathan|Faiman}}
+|Image Type=Typeset
+|Scanner=editor
+|Uploader=[[User:Faiman|Jonathan Faiman]]
+|Date Submitted=2012/9/10
+|Publisher Information=Faiman Music (ASCAP)
+|Copyright=Creative Commons Attribution 3.0
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_Clavierstück_FürElise-WoO59.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Viktor|Keil||}}
+|Image Type=Typeset
+|Scanner=editor
+|Uploader=[[User:Biberle|Biberle]]
+|Date Submitted=2024/8/12
+|Publisher Information=Viktor Keil, 2024.
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes=Created with Lilypond.
+}}
+
+
+===Arrangements and Transcriptions===
+=====For Orchestra (Rondeau)=====
+{{#fte:imslpfile
+|File Name 1=WIMA.8c48-FESco.pdf
+|File Name 2=WIMA.2613-WoO59.zip
+|File Description 1=Complete Score and Parts
+|File Description 2=Engraving files (Finale)
+|Arranger={{LinkArr|Michel|Rondeau}}
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Michrond|Michrond]]
+|Date Submitted=2012/5/1
+|Publisher Information=Michel Rondeau
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes={{WIMAProject}}
+}}
+=====For Strings (Choe)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Score.pdf
+|File Name 2=PMLP14377-VL1.pdf
+|File Name 3=PMLP14377-Vl2.pdf
+|File Name 4=PMLP14377-Va.pdf
+|File Name 5=PMLP14377-Vc.pdf
+|File Name 6=PMLP14377-Cb.pdf
+|File Description 1=Complete Score
+|File Description 2=Violins I
+|File Description 3=Violins II
+|File Description 4=Violas
+|File Description 5=Cellos
+|File Description 6=Basses
+|Arranger={{LinkArr|Joshua|Choe||}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:TradViolin|TradViolin]]
+|Date Submitted=2021/9/16
+|Publisher Information=Joshua Choe, 2020.
+|Copyright=Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+|Misc. Notes=[https://youtu.be/gDa8E9B-DiU YouTube recording]
+}}
+=====For 2 Violins, Viola, Cello (Fine)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Fu-r_Elise_String_Quartet_score_and_parts.pdf
+|File Description 1=Complete Score and Parts
+|Arranger={{LinkArr|Elaine|Fine}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Elainefine|Elainefine]]
+|Date Submitted=2024/4/13
+|Publisher Information=Elaine Fine, 2024.
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes=
+}}
+=====For Horn, Trumpet and Euphonium (Messerschmidt)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Für_Elise_-_C_(etc).pdf
+|File Description 1=Complete Score
+|Arranger={{LinkArr|Hans Jorgen|Messerschmidt|1944|}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Messerman|Messerman]]
+|Date Submitted=2021/5/8
+|Publisher Information=Hans Jorgen Messerschmidt, 2013.
+|Copyright=Creative Commons Attribution 4.0
+|Misc. Notes=
+}}
+=====For Oboe and Piano (Mahoney)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Fur_Elise_Arranged_for_Oboe_and_Piano_(1).pdf
+|File Description 1=Complete Score
+|Arranger={{LinkArr|Brandon Matthew Allen|Mahoney}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Mockingjay0578|Mockingjay0578]]
+|Date Submitted=2015/12/23
+|Publisher Information=Brandon Matthew Allen Mahoney
+|Copyright=Creative Commons Attribution 4.0
+|Misc. Notes=
+}}
+=====For Violin and Piano (Hellemann)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Fur_Elise_arr_Christian_Hellemann_1949.pdf
+|File Description 1=Complete Score and Violin Part
+|Arranger={{LinkArr|Christian|Hellemann|1880|1954}}
+|Editor=
+|Image Type=Normal Scan
+|Scanner=Michael Patterson
+|Uploader=[[User:Mikeymoon|Mikeymoon]]
+|Date Submitted=2014/12/29
+|Publisher Information={{P|W.H. Paling|W.H Paling & Co.|Sydney||1949||}}
+|Copyright=Public Domain
+|Misc. Notes=
+}}
+=====For Violin or Flute or Cello and Piano (Boehme)=====
+{{crossref|[[Album célèbre (Booth, Karl Edmund Otto von)|''Album célèbre'' (Vol1, No.1)]]}}
+=====For 2 Cellos (Verbandt)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-FurElise.pdf
+|File Description 1=Complete Score
+|Arranger={{LinkArr|Yves|Verbandt}}
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Yverband|yverband]]
+|Date Submitted=2009/10/3
+|Publisher Information=Yves Verbandt
+|Copyright=Creative Commons Attribution 3.0
+|Misc. Notes=
+}}
+=====For 2 Trumpets (Tuk)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Fur_Elise_-_A_Conversation_for_2_trumpets_-score.pdf
+|File Name 2=PMLP14377-Fur_Elise_(A_Conversation_for_2_trumpets)_-_Trumpet_II_(etc).pdf
+|File Description 1=Complete Score
+|File Description 2=Complete Parts
+|Arranger={{LinkArr|Leen|Tuk|1949|}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Leentuk|Leentuk]]
+|Date Submitted=2018/12/31
+|Publisher Information=Leen Tuk, 2014.
+|Copyright=Creative Commons Attribution-NonCommercial 4.0
+|Thumb Filename=TN-PMLP14377-Fur_Elise_-_A_Conversation_for_2_trumpets_-score-6454.png
+|Misc. Notes=
+}}
+=====For 2 Guitars (Olson)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-fur-elise-guitar-duo.pdf
+|File Name 2=PMLP14377-fur-elise-guitar-duo-a4.pdf
+|File Description 1=Complete Score
+|File Description 2=Complete Score (a4)
+|Arranger={{LinkArr|J. J.|Olson|1947|}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Charanguero|Charanguero]]
+|Date Submitted=2019/1/14
+|Publisher Information=Mutopia, 2015.
+|Copyright=Creative Commons Zero 1.0
+|Thumb Filename=TN-PMLP14377-fur-elise-guitar-duo-687.jpg
+|Misc. Notes=Published as Mutopia-2015/11/02-2059.  See also: {{LinkWorkN|Beethoven Guitar Duets||Olson|J. J.|0}}
+}}
+=====For Guitar (Apke)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_L_v-Fuer_Elise+mid.pdf
+|File Description 1=Complete Score
+|Arranger={{LinkArr|Stefan|Apke|1963|}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Stefan Apke|Stefan Apke]]
+|Date Submitted=2024/8/1
+|Publisher Information=Vlotho: Stefan Apke, 2002/2024.
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes=
+}}
+=====For Guitar (Shorter)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-fur_elise.pdf
+|File Description 1=Complete Score
+|Arranger={{LinkArr|Steve|Shorter}}
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Minstrel|Minstrel]]
+|Date Submitted=2014/3/10
+|Publisher Information=Steve Shorter
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes=
+}}
+=====For Flute, Clarinet and Bassoon (Goodman)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_fur_Elise_flclbn_score_parts.pdf
+|File Description 1=Complete Score
+|Arranger={{LinkArr|Roe William|Goodman|1938|}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Roe.w.goodman|Roe.w.goodman]]
+|Date Submitted=2026/4/11
+|Publisher Information=Roe William Goodman
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_fur_Elise_flute.pdf
+|File Name 2=PMLP14377-Beethoven_fur_Elise_clarfl.pdf
+|File Name 3=PMLP14377-Beethoven_fur_Elise_bsnfl.pdf
+|File Description 1=Flute
+|File Description 2=Clarinet
+|File Description 3=Bassoon
+|Arranger={{LinkArr|Roe William|Goodman|1938|}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Roe.w.goodman|Roe.w.goodman]]
+|Date Submitted=2026/4/25
+|Publisher Information=Roe William Goodman
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes=
+}}
+=====For Oboe, Clarinet and Bassoon (Goodman)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_fur_Elise_obclbn_score_parts.pdf
+|File Description 1=Complete Score
+|Arranger={{LinkArr|Roe William|Goodman|1938|}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Roe.w.goodman|Roe.w.goodman]]
+|Date Submitted=2026/4/11
+|Publisher Information=Roe William Goodman
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_fur_Elise_oboe.pdf
+|File Name 2=PMLP14377-Beethoven_fur_Elise_clarob.pdf
+|File Name 3=PMLP14377-Beethoven_fur_Elise_bsnob.pdf
+|File Description 1=Oboe
+|File Description 2=Clarinet
+|File Description 3=Bassoon
+|Arranger={{LinkArr|Roe William|Goodman|1938|}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Roe.w.goodman|Roe.w.goodman]]
+|Date Submitted=2026/4/25
+|Publisher Information=Roe William Goodman
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes=
+}}
+=====For 2 Clarinets and Bassoon (Goodman)=====
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_fur_Elise_clclbn_score_parts.pdf
+|File Description 1=Complete Score and Parts
+|Arranger={{LinkArr|Roe William|Goodman|1938|}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Roe.w.goodman|Roe.w.goodman]]
+|Date Submitted=2026/4/11
+|Publisher Information=Roe William Goodman
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_fur_Elise_clar1.pdf
+|File Name 2=PMLP14377-Beethoven_fur_Elise_clar2.pdf
+|File Name 3=PMLP14377-Beethoven_fur_Elise_bsncl.pdf
+|File Description 1=Clarinet 1
+|File Description 2=Clarinet 2
+|File Description 3=Bassoon
+|Arranger={{LinkArr|Roe William|Goodman|1938|}}
+|Editor=
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Roe.w.goodman|Roe.w.goodman]]
+|Date Submitted=2026/4/25
+|Publisher Information=Roe William Goodman
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes=
+}}
+
+===Sketches and Drafts===
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven-Haus_Bonn,_BH_116.pdf
+|File Description 1=Sketches
+|Editor=
+|Image Type=Manuscript Scan
+|Scanner={{BeethBonnMS}}
+|Uploader=[[User:Feduol|Feduol]]
+|Date Submitted=2025/5/1
+|Publisher Information=Holograph manuscript, 1810 (March 3).
+|Copyright=Public Domain
+|Misc. Notes=Also contains sketches for [[Egmont, Op.84 (Beethoven, Ludwig van)|''Egmont'']], Op.84, and [[2 Marches for Military Band, WoO 18-19 (Beethoven, Ludwig van)|''March in F major'']], Woo 19.
+}}
+
+===Braille Scores===
+{{#fte:imslpfile
+|File Name 1=PMLP14377-Beethoven_-_Für_Elise.brf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Hu|Haipeng|1984|}}
+|Image Type=Typeset
+|Scanner=editor
+|Uploader=[[User:Feduol|Feduol]]
+|Date Submitted=2023/12/18
+|Publisher Information=Hu Haipeng, 2018.
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes={{BrailleScore|bar-over-bar|40||0|optimized for refreshable braille displays}}
+}}
+
+| *****WORK INFO*****
+
+|Work Title=Für Elise
+|Alternative Title=Bagatelle No.25 in A minor ; Für Therese
+|Opus/Catalogue Number=WoO 59
+|Key={{Key|a}}
+|Number of Movements/Sections=1. Poco moto
+|Average Duration=3 minutes
+|Dedication=Therese Malfatti von Rohrenbach zu Dezza (supposed)
+|Year/Date of Composition=1810
+|Year of First Publication=1867 - in ''Neue Briefe Beethovens'' (ed. Ludwig Nohl, pp.28-33)
+|Librettist=
+|Language=
+|Piece Style=Classical
+|Incipit=<score>\relative e'' {\clef "treble" \time 3/8 \key c \major \partial 8 \stemDown e16\pp
+  \stemDown dis16 | % 1
+  \stemDown e16 \stemDown dis \stemDown e \stemDown b \stemDown
+  d16 \stemDown c | % 2
+  \stemUp a8 r16 \stemUp c, \stemUp e \stemUp a | % 3
+  \stemDown b8 r16 \stemUp e, \stemUp gis \stemUp b | % 4
+  \stemDown c8 r16 
+}</score>
+|External Links=[[wikipedia:Für_Elise|Wikipedia article]]<br>{{plain|https://www.henle.de/blog/en/2011/11/30/beethoven-fur-elise-woo-59-%E2%80%93-do-you-strike-the-right-note/|Henle Verlag}}
+|Extra Information=What Ludwig Nohl claims to be the basis of his first publication of the work has never been found. All we have of the piece are (1) two lines of sketches from 1808 and (2) sketches from 1810 with pencil revisions from 1822, probably, for inclusion into the set of 11 Bagatelles, Op.119. The work as we know it today is entirely based on Ludwig Nohl's first edition, which in turn is very similar to the 1810 version of the work. The manuscript upon which Nohl based his edition is inscribed "Für Elise am 27 April zur Erinnerung von L.v.Bthvn" (for which scholarship has generally agreed that 1810 is the year) and apparently given to him by a certain Babeth Bredl from the possessions of Therese von Malfatti.
+|Instrumentation=piano
+|Tags=pieces ; bagatelles ; pf
+
+| *****COMMENTS***** =
+
+
+
+| *****END OF TEMPLATE***** }}

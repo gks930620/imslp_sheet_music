@@ -1,0 +1,134 @@
+{{#fte:imslppage
+
+| *****AUDIO***** =
+{{#fte:imslpaudio
+|File Name 1=PMLP01458-Beethoven_-_Piano_Sonata_No.14_-_I._Adagio_sostenuto.mp3
+|File Description 1=1. Adagio sostenuto
+|Performers=
+|Performer Categories=Pitman, Paul=piano
+|Uploader=[[User:Feldmahler|Feldmahler]]
+|Date Submitted=2007/11/8
+|Publisher Information=Musopen
+|Copyright=Public Domain
+|Misc. Notes=
+}}
+| *****FILES***** =
+====Complete====
+{{#fte:imslpfile
+|File Name 1=Beethoven_-_Op.27_No.2_-_Cappi_-_Score.pdf
+|File Description 1=Complete Score
+|Editor=First edition
+|Image Type=Normal Scan
+|Scanner=Unknown
+|Uploader=[[User:Perlnerd666|Perlnerd666]]
+|Date Submitted=2008/6/15
+|Publisher Information={{P|Cappi|Gio. Cappi e Comp.|Vienna||n.d.[1802]|879|}}
+|Copyright=Public Domain
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP01458-Beethoven,_Ludwig_van-Werke_Breitkopf_Kalmus_Band_21_B137_Op_27_No_2_scan.pdf
+|File Name 2=PMLP1458-Beethoven,_L._van_-_14._Sonata_for_Piano_in_C-_minor,_Op._27.2_'Moonlight'.pdf
+|File Description 1=Complete Score
+|File Description 2=Complete Score
+|Editor=
+|Image Type=Normal Scan
+|Image Type 2=Normal Scan
+|Scanner=Unknown
+|Scanner 2=Unknown
+|Uploader=[[User:Notenschreiber|Notenschreiber]]
+|Uploader 2=[[User:Ngmusic|Ngmusic]]
+|Date Submitted=2014/10/19
+|Date Submitted 2=2024/12/2
+|Publisher Information={{BeethovenWerke|16|137}}<br>Reprinted — New York: Edwin F. Kalmus, n.d.(1933-70). Catalog K-1
+|Copyright=Public Domain
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP01458-Beethoven_Sonaten_Piano_Band1_Peters_9452_14_Op27_No2_1200dpi.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Louis|Köhler|1820|1886}}<br>{{LinkEd|Adolf|Ruthardt|1849|1934}}
+|Image Type=Normal Scan
+|Scanner=Unknown
+|Uploader=[[User:Feldmahler|Feldmahler]]
+|Date Submitted=2006/3/26
+|Publisher Information=''Sonaten für Pianoforte solo'', Bd.1 (pp.248-61)<br>{{P|Peters|C.F. Peters|Leipzig||n.d.(ca.1910)|9452|}}
+|Copyright=Public Domain
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=Beethoven,_L.v._-_Piano_Sonata_14.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Heinrich|Schenker|1868|1935}}
+|Image Type=Normal Scan
+|Scanner=Unknown
+|Uploader=[[User:Feldmahler|Feldmahler]]
+|Date Submitted=2006/2/16
+|Publisher Information={{P|Universal Edition|Universal Edition|Vienna||1921|U.E. 7000|}}<br>Reprinted — New York: Dover Publications, 1975.
+|Copyright=Public Domain
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=PMLP1458-Beethoven_Klavier-Mondscheinsonate-Op27Nr2.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Viktor|Keil||}}
+|Image Type=Typeset
+|Scanner=editor
+|Uploader=[[User:Viktor Keil|Viktor Keil]]
+|Date Submitted=2024/9/2
+|Publisher Information=Viktor Keil, 2024.
+|Copyright=Creative Commons Attribution-ShareAlike 4.0
+|Misc. Notes=
+}}
+====Adagio sostenuto (No.1)====
+{{#fte:imslpfile
+|File Name 1=PMLP01458-Beethoven_Op_27_No_2_I.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd||RSB||}}
+|Image Type=Typeset
+|Scanner=editor
+|Uploader=[[User:Rasmus123|RSB]]
+|Date Submitted=2012/5/12
+|Publisher Information=RSB, 2012.
+|Copyright=Creative Commons Attribution 3.0
+|Misc. Notes=
+}}
+===Arrangements and Transcriptions===
+====Complete====
+=====For Strings (Kowalewski)=====
+{{#fte:imslpfile
+|File Name 1=PMLP01458-Beethoven_-_sonata_księżycowa_na_smyczki_-_partytura_i_głosy_-_30-08-2014.pdf
+|File Description 1=Complete Score and Parts
+|Arranger={{LinkArr|Jakub|Kowalewski}}
+|Image Type=Typeset
+|Scanner=arranger
+|Uploader=[[User:Dwakretki|Dwakretki]]
+|Date Submitted=2014/8/30
+|Publisher Information=Jakub Kowalewski
+|Copyright=Creative Commons Attribution 4.0
+|Misc. Notes=
+}}
+
+| *****WORK INFO*****
+
+|Work Title=Piano Sonata No.14
+|Alternative Title=Sonata quasi una fantasia ; Moonlight Sonata
+|Opus/Catalogue Number=Op.27 No.2
+|Key={{Key|c#}}
+|Number of Movements/Sections=3 movements:
+#Adagio sostenuto (C♯ minor, 69 bars)
+#Allegretto - Trio (D♭ major, 60 bars)
+#Presto agitato (C♯ minor, 201 bars)
+|Average Duration=15-16 minutes
+|Dedication=Gräfin Giulietta Guicciardi
+|Year/Date of Composition=1802
+|Year of First Publication=1802
+|Librettist=
+|Language=
+|Piece Style=Classical
+|Incipit=
+|External Links=[[wikipedia:Piano Sonata No. 14 (Beethoven)|Wikipedia article]]<br>[https://www.allmusic.com/composition/mc0002365856 All Music Guide]
+|Extra Information=
+|Instrumentation=piano
+|Tags=sonatas ; pf
+| *****END OF TEMPLATE***** }}

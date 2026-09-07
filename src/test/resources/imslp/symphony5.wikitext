@@ -1,0 +1,42 @@
+{{#fte:imslppage
+
+| *****AUDIO***** =
+| *****FILES***** =
+====Complete====
+{{#fte:imslpfile
+|File Name 1=Beethoven_-_Symphony_No.5_-_Full_Score.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Max|Unger|1883|1959}}
+|Image Type=Normal Scan
+|Scanner=Unknown
+|Uploader=[[User:Feldmahler|Feldmahler]]
+|Date Submitted=2006/4/2
+|Publisher Information={{P|Eulenburg|Ernst Eulenburg|Leipzig||n.d.(ca.1938)|E.E. 3616|}}
+|Copyright=Public Domain
+|Misc. Notes=
+}}
+
+| *****WORK INFO*****
+
+|Work Title=Symphony No.5
+|Alternative Title=Schicksals-Sinfonie
+|Opus/Catalogue Number=Op.67
+|Key={{Key|c}}
+|Number of Movements/Sections=4 movements:
+#Allegro con brio
+#Andante con moto
+#Scherzo. Allegro
+#Allegro
+|Average Duration=31-35 minutes
+|Dedication=
+|Year/Date of Composition=1804-08
+|Year of First Publication=1809
+|Librettist=
+|Language=
+|Piece Style=Classical
+|Incipit=
+|External Links=[[wikipedia:Symphony No. 5 (Beethoven)|Wikipedia article]]
+|Extra Information=
+|Instrumentation=orchestra
+|Tags=symphonies ; orch
+| *****END OF TEMPLATE***** }}
