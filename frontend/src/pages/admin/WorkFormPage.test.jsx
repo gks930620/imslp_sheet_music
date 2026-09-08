@@ -288,6 +288,8 @@ describe("WorkFormPage — 검증·저장", () => {
       musicalKey: "C-sharp minor",
       movements: "3 movements",
       movementPageGuide: null,
+      // §4-8 전체 교체 — 상세 응답(§4-7)에서 받은 값을 손대지 않았으면 그대로 되돌려 보낸다
+      collectionGuide: "이 악보에는 3개 악장이 들어 있어요 — 흔히 아는 느린 선율은 1악장이에요",
       imslpUrl: "https://imslp.org/wiki/Piano_Sonata_No.14,_Op.27_No.2_(Beethoven,_Ludwig_van)",
       hidden: false,
     });
@@ -412,5 +414,100 @@ describe("WorkFormPage — 변경 후 이탈 (05-E 상태별 UI)", () => {
     await user.click(screen.getByRole("link", { name: "곡 관리" }));
     await waitFor(() => expect(getLocation().pathname).toBe("/admin/works"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 수록곡 안내(collectionGuide) — 02_API §4-7(응답) · §4-8(요청, 전체 교체) · §2-2-1(scopeNote.COLLECTION)
+//
+// 왜 따로 묶는가: PUT 은 전체 교체다. 화면이 §4-7 로 받은 필드를 §4-8 로 되돌려 보내지 않으면
+// 관리자가 제목만 고쳐 저장해도 그 필드가 null 로 덮인다. collectionGuide 는 시드가 38곡에 넣은 값이고
+// (01_ERD §6) 백필은 seed_load(COLLECTION_GUIDE, imslp_url) 기록 때문에 다시 채우지 않아 영구 유실이며,
+// 검색 결과의 scopeNote.COLLECTION 판정 근거라 사용자 화면의 줄까지 함께 사라진다.
+// ─────────────────────────────────────────────────────────────────────────────
+const COLLECTION_GUIDE = "이 악보에는 3개 악장이 들어 있어요 — 흔히 아는 느린 선율은 1악장이에요";
+
+describe("WorkFormPage — 수록곡 안내(collectionGuide) 왕복", () => {
+  it("상세 응답의 collectionGuide 가 '수록곡 안내' 칸에 채워진다", async () => {
+    renderEdit();
+    await waitLoaded();
+    expect(screen.getByLabelText("수록곡 안내")).toHaveValue(COLLECTION_GUIDE);
+  });
+
+  it("다른 필드만 고쳐 저장해도 PUT 본문에 collectionGuide 가 그대로 실려 나간다", async () => {
+    const user = userEvent.setup();
+    renderEdit();
+    await waitLoaded();
+    await user.clear(screen.getByLabelText("한국어 대표 제목"));
+    await user.type(screen.getByLabelText("한국어 대표 제목"), "월광");
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(detailCalls("PUT")).toHaveLength(1));
+    expect(detailCalls("PUT")[0].body.titleKo).toBe("월광");
+    expect(detailCalls("PUT")[0].body.collectionGuide).toBe(COLLECTION_GUIDE);
+  });
+
+  it("칸을 비워 저장하면 null 로 나간다 (전체 교체 계약 — 지울 수단이 있어야 한다)", async () => {
+    const user = userEvent.setup();
+    renderEdit();
+    await waitLoaded();
+    await user.clear(screen.getByLabelText("수록곡 안내"));
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(detailCalls("PUT")).toHaveLength(1));
+    expect(detailCalls("PUT")[0].body.collectionGuide).toBeNull();
+  });
+
+  it("공백만 남겨도 null 로 나간다 (다른 문자열 필드와 같은 정규화)", async () => {
+    const user = userEvent.setup();
+    renderEdit();
+    await waitLoaded();
+    await user.clear(screen.getByLabelText("수록곡 안내"));
+    await user.type(screen.getByLabelText("수록곡 안내"), "   ");
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(detailCalls("PUT")).toHaveLength(1));
+    expect(detailCalls("PUT")[0].body.collectionGuide).toBeNull();
+  });
+
+  it("collectionGuide 가 null 인 곡(수집으로 들어온 곡)에 적어 넣으면 그 값이 저장된다", async () => {
+    const user = userEvent.setup();
+    renderEdit(adminWorkDetail({ collectionGuide: null }));
+    await waitLoaded();
+    expect(screen.getByLabelText("수록곡 안내")).toHaveValue("");
+    await user.type(screen.getByLabelText("수록곡 안내"), "'강아지 왈츠'가 들어 있는 왈츠 모음이에요");
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(detailCalls("PUT")).toHaveLength(1));
+    expect(detailCalls("PUT")[0].body.collectionGuide).toBe("'강아지 왈츠'가 들어 있는 왈츠 모음이에요");
+  });
+
+  it("'숨김으로 바꾸기'(삭제 대신 저장)에서도 collectionGuide 가 보존된다", async () => {
+    const user = userEvent.setup();
+    renderEdit(adminWorkDetail({ hasDownloadHistory: true }));
+    await waitLoaded();
+    await user.click(workDeleteButton());
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "숨김으로 바꾸기" }));
+    await waitFor(() => expect(detailCalls("PUT")).toHaveLength(1));
+    expect(detailCalls("PUT")[0].body.hidden).toBe(true);
+    expect(detailCalls("PUT")[0].body.collectionGuide).toBe(COLLECTION_GUIDE);
+  });
+
+  it("새 곡 등록 본문에도 collectionGuide 키가 있다 (미입력이면 null)", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await user.type(screen.getByLabelText("작곡가"), "베토");
+    await user.click(screen.getByRole("option", { name: "베토벤 (Beethoven, Ludwig van)" }));
+    await user.type(screen.getByLabelText("원어 제목"), "Piano Sonata No.14, Op.27 No.2");
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(findCalls(COLLECTION)).toHaveLength(1));
+    expect(findCall(COLLECTION).body).toHaveProperty("collectionGuide");
+    expect(findCall(COLLECTION).body.collectionGuide).toBeNull();
+  });
+
+  it("수록곡 안내만 고쳐도 '바뀐 게 있다'로 보고 이탈을 막는다 (05-E)", async () => {
+    const user = userEvent.setup();
+    const { getLocation } = renderEdit();
+    await waitLoaded();
+    await user.type(screen.getByLabelText("수록곡 안내"), "!");
+    await user.click(screen.getByRole("link", { name: "곡 관리" }));
+    expect(screen.getByRole("dialog", { name: "저장하지 않은 변경이 있어요" })).toBeInTheDocument();
+    expect(getLocation().pathname).toBe("/admin/works/21");
   });
 });
