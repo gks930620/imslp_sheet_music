@@ -1,5 +1,6 @@
 package com.test.test.file.controller;
 
+import com.test.test.file.service.FileService;
 import com.test.test.file.strategy.FileStorageStrategy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
@@ -20,9 +21,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class FileServingController {
 
     private final FileStorageStrategy fileStorageStrategy;
+    private final FileService fileService;
 
+    /**
+     * 저장 파일명으로 바이트를 내준다. 단 <b>판본 PDF 는 404</b> 다 — 그 바이트의 유일한 공개 경로는
+     * 저작권 게이트를 태우는 {@code GET /api/editions/{id}/download} 다(02 §3-4).
+     * 판단은 {@link FileService#isPubliclyServable(String)} 한 곳에 있다(컨트롤러는 얇게).
+     */
     @GetMapping("/uploads/{storedFileName:.+}")
     public ResponseEntity<Resource> serve(@PathVariable String storedFileName) {
+        if (!fileService.isPubliclyServable(storedFileName)) {
+            return ResponseEntity.notFound().build();
+        }
         Resource resource = fileStorageStrategy.loadAsResource(storedFileName);
         if (resource == null || !resource.exists() || !resource.isReadable()) {
             return ResponseEntity.notFound().build();

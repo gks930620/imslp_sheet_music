@@ -103,6 +103,21 @@ public abstract class AdminApiTestSupport extends ApiIntegrationTestSupport {
         return count != null && count > 0;
     }
 
+    /**
+     * files 행의 웹 경로({@code /uploads/{저장파일명}}) — 02 §3-4 의 "{@code /uploads} 는 미리보기 전용" 게이트를
+     * 시험하는 유일한 수단.
+     *
+     * <p>판본 PDF 의 저장 파일명은 <b>어떤 API 로도 알 수 없는 것이 계약</b>이다(§3-4 우회 차단).
+     * 그래서 "이름을 손에 넣은 사람" 을 재현하려면 DB 에서 직접 읽는 수밖에 없다
+     * (qa 3차는 서버의 {@code uploads/} 폴더를 그대로 훑어 이름을 얻었다).
+     */
+    protected String storedWebPath(long fileId) {
+        return entityManager
+                .createQuery("select f.filePath from FileEntity f where f.id = :id", String.class)
+                .setParameter("id", fileId)
+                .getSingleResult();
+    }
+
     protected List<Long> longs(JsonNode array, String field) {
         List<Long> list = new ArrayList<>();
         array.forEach(n -> list.add(n.path(field).asLong()));
@@ -261,6 +276,47 @@ public abstract class AdminApiTestSupport extends ApiIntegrationTestSupport {
     /** 파일 없는(정보만) 판본 1개, 판정 UNKNOWN. */
     protected long createInfoEdition(Tokens tokens, long workId) throws Exception {
         return createEdition(tokens, workId, editionBody(null, null, null, "UNKNOWN", null));
+    }
+
+    /**
+     * 현재 판본(§5-4 {@code AdminEditionDTO})을 그대로 다시 저장하는 §5-3 요청 본문.
+     * PUT 은 전체 교체라, 한 필드만 바꾸는 시나리오는 나머지를 현재 값으로 채워야 한다.
+     */
+    protected Map<String, Object> editionSaveBodyFrom(JsonNode edition) {
+        return json(
+                "fileId", nullableLong(edition, "pdfFileId"),
+                "previewFileId", nullableLong(edition, "previewFileId"),
+                "kind", text(edition, "kind"),
+                "scope", text(edition, "scope"),
+                "movementNumber", nullableInt(edition, "movementNumber"),
+                "pageCount", nullableInt(edition, "pageCount"),
+                "publisher", text(edition, "publisher"),
+                "publishYear", nullableInt(edition, "publishYear"),
+                "plateNumber", text(edition, "plateNumber"),
+                "editor", text(edition, "editor"),
+                "arranger", text(edition, "arranger"),
+                "scanner", text(edition, "scanner"),
+                "imslpFileUrl", text(edition, "imslpFileUrl"),
+                "imslpCopyrightText", text(edition, "imslpCopyrightText"),
+                "koreaCopyright", text(edition, "koreaCopyright"),
+                "copyrightNote", text(edition, "copyrightNote"),
+                "ccLicenseName", text(edition, "ccLicenseName"),
+                "ccAttribution", text(edition, "ccAttribution"));
+    }
+
+    protected static String text(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isNull() || value.isMissingNode() ? null : value.asText();
+    }
+
+    protected static Long nullableLong(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isNull() || value.isMissingNode() ? null : value.asLong();
+    }
+
+    protected static Integer nullableInt(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isNull() || value.isMissingNode() ? null : value.asInt();
     }
 
     protected JsonNode getEdition(Tokens tokens, long editionId) throws Exception {

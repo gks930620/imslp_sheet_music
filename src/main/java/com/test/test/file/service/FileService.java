@@ -35,6 +35,8 @@ public class FileService {
 
     // 본문 HTML에서 /uploads/{저장파일명} 참조를 추출하는 패턴 (§5-3-1 ① reconcile)
     private static final Pattern UPLOADS_REF = Pattern.compile("/uploads/([^\\s\"'<>()\\\\]+)");
+    private static final String PDF_CONTENT_TYPE = "application/pdf";
+    private static final String PDF_EXTENSION = ".pdf";
 
     private final FileRepository fileRepository;
     private final FileUtil fileUtil;
@@ -221,6 +223,38 @@ public class FileService {
      */
     private static boolean isEditionScoped(RefType refType) {
         return refType == RefType.EDITION;
+    }
+
+    /**
+     * {@code /uploads/{저장파일명}} 으로 바이트를 그대로 내줘도 되는 파일인가 (02 §3-4).
+     *
+     * <p><b>판본 PDF 는 안 된다.</b> §3-4 는 {@code GET /api/editions/{id}/download} 가 판본 바이트를 얻는
+     * <b>유일한</b> 공개 경로라고 못 박는다. 그 API 는 숨김 404 → 파일 없음 404 → 비 FREE 403 → 바이트 없음 503
+     * 게이트를 태우고 다운로드 수·기록도 남긴다. 저장 파일명만 알면 되는 이 프록시가 같은 바이트를 내주면
+     * 저작권 게이트가 통째로 우회되어 기획 §9-1 재배포 정책이 무의미해진다(qa 3차 실측).
+     *
+     * <p>막는 것은 판본 <b>PDF</b> 뿐이다 — 미리보기 PNG(§0-4 {@code previewUrl})와 커뮤니티·프로필 파일은
+     * 그대로 서빙된다. <b>{@code files} 행이 없는 저장 파일명도 막는다</b> — 판본 삭제·고아 정리 실패로
+     * 업로드 폴더에 바이트만 남는 일이 실제로 있고, 행이 없으면 그 바이트가 무엇인지 우리가 알 수 없다.
+     */
+    public boolean isPubliclyServable(String storedFileName) {
+        if (storedFileName == null || storedFileName.isBlank()) {
+            return false;
+        }
+        return fileRepository.findFirstByStoredFileName(storedFileName)
+                .map(file -> !isEditionPdf(file))
+                .orElse(false);
+    }
+
+    /** 판본 PDF 판정 — 미리보기 PNG(THUMBNAIL)와 갈라야 하므로 용도·Content-Type·확장자를 함께 본다. */
+    private static boolean isEditionPdf(FileEntity file) {
+        if (!isEditionScoped(file.getRefType())) {
+            return false;
+        }
+        return file.getFileUsage() == Usage.ATTACHMENT
+                || PDF_CONTENT_TYPE.equalsIgnoreCase(file.getContentType())
+                || (file.getStoredFileName() != null
+                        && file.getStoredFileName().toLowerCase().endsWith(PDF_EXTENSION));
     }
 
     /**

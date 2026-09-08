@@ -16,6 +16,13 @@ public interface FileRepository extends JpaRepository<FileEntity, Long>, FileRep
     List<FileEntity> findByRefIdAndRefType(Long refId, RefType refType);
 
     /**
+     * 저장 파일명으로 파일 행 1건. {@code /uploads/{저장파일명}} 프록시가 "이 바이트를 그대로 내줘도 되는가"를
+     * 판단할 때 쓴다(02 §3-4 — 판본 PDF 는 다운로드 API 가 유일한 공개 경로).
+     * 저장 파일명은 UUID 기반이라 사실상 유일하지만, 스키마에 UNIQUE 제약이 없으므로 First 로 받는다.
+     */
+    java.util.Optional<FileEntity> findFirstByStoredFileName(String storedFileName);
+
+    /**
      * 본문 reconcile(§5-3-1 ①)에서 사용: 아직 글에 연결되지 않은 임시 이미지(refId=0) 중
      * 본문에 실제로 참조된 저장파일명들만 조회 → 글ID로 연결(link)한다.
      */
