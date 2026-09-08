@@ -15,20 +15,33 @@ spring:
       max-file-size: 100MB     # 악보 PDF 업로드 상한 (기획 §9 8-6, 03 §5)
       max-request-size: 105MB  # 전체 요청 최대 크기
 
-  # 개발(dev)은 인메모리 H2(MySQL 호환) 사용 → 로컬에 MariaDB 없어도 실행됨. 배포는 prod 프로파일에서 MySQL.
+  # 개발(dev)은 파일 H2(MySQL 호환) 사용 → 로컬에 MariaDB 없어도 실행되고, 재시작해도 수집 데이터가 남는다.
+  # 컨벤션 §5-2("로컬 H2 는 매 기동 초기화")의 명시적 예외 — 사유는 03_기술결정 §17.
+  # IMSLP 에서 예절을 지켜 가며 수 시간 걸려 받아온 데이터를 재시작마다 버리면 같은 부담을 반복해서 준다.
+  # 초기화하려면 서버를 끄고 프로젝트 루트의 data/ 와 uploads/ 를 지운다 (§17-4).
+  # 휘발로 쓰고 싶으면 SPRING_DATASOURCE_URL=jdbc:h2:mem:devdb;MODE=MySQL 로 띄운다.
+  # AUTO_SERVER 는 쓰지 않는다 (2026-09-07 결정) — H2 2.x 는 AUTO_SERVER=TRUE 와 DB_CLOSE_ON_EXIT=FALSE 의
+  # 공존을 금지해서(Feature not supported [50100-224]) 둘 중 하나를 버려야 하고, DB_CLOSE_ON_EXIT=FALSE 를 남겼다.
+  #  (1) h2-console 은 같은 JVM 안이라 AUTO_SERVER 없이도 그대로 동작한다.
+  #  (2) 수 시간짜리 수집에서는 외부 도구 동시 접속 편의보다 종료 시퀀스 안전 —
+  #      H2 자체 셧다운 훅이 Spring 정리보다 먼저 DB 를 닫지 않는 것 — 이 더 중요하다.
+  #  (3) AUTO_SERVER 는 남아 있는 옛 JVM 이 조용히 옛 DB 를 계속 서빙하는 사고를 만든다(실제로 겪었다).
+  # 이 URL 로 커넥션이 열리는지는 LocalFileDbConfigTest 가 지킨다 (통합테스트는 전부 인메모리라 여길 밟지 않는다).
   datasource:
-    url: jdbc:h2:mem:devdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    url: jdbc:h2:file:${LOCAL_DB_PATH:./data/devdb};MODE=MySQL;DB_CLOSE_ON_EXIT=FALSE
     driver-class-name: org.h2.Driver
     username: sa
     password:
 
   h2:
     console:
-      enabled: true   # http://localhost:8080/h2-console (JDBC URL: jdbc:h2:mem:devdb)
+      enabled: true   # http://localhost:8080/h2-console (JDBC URL: 위 datasource.url 그대로)
+                      # AUTO_SERVER 를 안 쓰므로 파일 DB 는 기동 중인 서버 JVM 안에서만 열린다 —
+                      # 외부 DB 툴로 동시 접속하려면 서버를 먼저 끈다.
 
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: update   # create 면 매 기동 스키마가 날아가 파일 DB 가 무의미하다 (03 §17-2)
     defer-datasource-initialization: true # data-users.sql 실행 시점 조정 (DDL 후 실행)
     properties:
       hibernate:
@@ -41,6 +54,8 @@ spring:
 
   sql:
     init:
+      # 파일 DB 일 때는 LocalDbInitModePostProcessor 가 이 값을 덮는다 —
+      # DB 파일이 이미 있으면 never(시드 재실행 = PK 충돌·중복 누적), 없으면 always (03 §17-3).
       mode: always
       encoding: UTF-8   # 시드 .sql 을 UTF-8 로 읽는다 (컨벤션 §5-2)
       data-locations:

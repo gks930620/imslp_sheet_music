@@ -3,6 +3,9 @@ package com.test.test.file.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.LocalDateTime;
 
 @Entity
@@ -36,11 +39,14 @@ public class FileEntity {
     // 정식 refId를 가진 파일은 참조 리소스(게시글/사용자)에서 소유권이 파생되므로 보조 용도.
     private String uploadedBy;
 
+    @Column(length = 30)
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     private RefType refType;
 
-    @Column(name = "file_usage")
+    @Column(name = "file_usage", length = 30)
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     private Usage fileUsage;
 
     private LocalDateTime createdAt;

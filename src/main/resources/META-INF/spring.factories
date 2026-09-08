@@ -1,0 +1,5 @@
+# 파일 H2 로컬 DB 일 때 시드 스크립트 재실행을 막는 설정 계산 (03_기술결정 §17-3).
+# Spring Boot 3.3.4 는 EnvironmentPostProcessor 를 SpringFactoriesLoader.forDefaultResourceLocation
+# (= 이 파일)로만 찾는다 — .imports 파일은 자동설정 전용이라 여기서는 읽히지 않는다.
+org.springframework.boot.env.EnvironmentPostProcessor=\
+  com.test.test.common.config.LocalDbInitModePostProcessor

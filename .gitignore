@@ -109,6 +109,9 @@ application-prod.properties
 
 /uploads/
 
+# 로컬 파일 H2 DB (03_기술결정 §17) — 수집 데이터가 재시작에도 남게 하는 로컬 전용 파일. 절대 커밋하지 않는다.
+/data/
+
 # React frontend
 frontend/node_modules/
 frontend/dist/

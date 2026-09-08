@@ -18,6 +18,8 @@ import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /** 곡 별칭 (01_ERD §3-4). 같은 곡 안 중복은 DB 가 막고, 다른 곡과 겹치는 것은 허용한다. */
 @Entity
@@ -44,6 +46,7 @@ public class WorkAliasEntity {
     private String aliasNormalized;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "source", length = 30, nullable = false)
     private AliasSource source;
 
