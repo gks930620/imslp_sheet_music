@@ -71,7 +71,27 @@ export function WorkDetailPage() {
     : work.composer?.nameOriginal ?? "";
   const catalog = (work.catalogNumbers ?? []).join(" · ");
   const factLine = [work.compositionYear, work.musicalKey, work.movements].filter(Boolean).join(" · ");
+  // 02 §3-3 · 기획 §F3-4 — 줄이 되는 것은 "우리가 파일을 가진 판본" 뿐이고,
+  // 파일 없는 판본은 imslpOnlyCount 한 줄이 대신한다(보낼 곳이 없으면 그 줄도 만들지 않는다).
   const others = work.otherEditions ?? [];
+  const imslpOnlyCount = work.imslpOnlyCount ?? 0;
+  // 기획 §F3-7 · 02 §3-3-2 — 못 주는 곡(준비 중·이용 제한·확인 중)은 작품 페이지가 아니라
+  // "우리가 고른 판본" 의 IMSLP 파일 페이지로 보낸다. 추천이 있으면 추천, 없으면 서버가 고른 후보,
+  // 둘 다 없으면 작품 페이지. 후보는 파일이 없을 수 있어(hasFile=false) 다운로드에는 절대 쓰지 않는다.
+  const imslpTargetUrl =
+    recommended?.imslpFileUrl ?? work.imslpCandidateEdition?.imslpFileUrl ?? work.imslpUrl ?? null;
+  const imslpOnlyNote =
+    imslpOnlyCount > 0 && work.imslpUrl ? (
+      <p className="other-editions-imslp-note">
+        {`IMSLP 에는 이 곡의 다른 악보가 ${imslpOnlyCount}개 더 있어요 — `}
+        <a href={work.imslpUrl} target="_blank" rel="noreferrer">
+          IMSLP 에서 보기
+          <span className="material-icons" aria-hidden="true">
+            open_in_new
+          </span>
+        </a>
+      </p>
+    ) : null;
 
   const openLightbox = (edition) =>
     setLightbox({
@@ -128,8 +148,8 @@ export function WorkDetailPage() {
             <span className="material-icons">hourglass_empty</span>
             <h2 className="edition-card-preparing-title">악보를 준비하고 있어요</h2>
             <p className="edition-card-preparing-desc">IMSLP 원본 페이지에서 먼저 볼 수 있어요</p>
-            {work.imslpUrl ? (
-              <a className="btn btn-outline" href={work.imslpUrl} target="_blank" rel="noreferrer">
+            {imslpTargetUrl ? (
+              <a className="btn btn-outline" href={imslpTargetUrl} target="_blank" rel="noreferrer">
                 IMSLP에서 보기
                 <span className="material-icons" aria-hidden="true">
                   open_in_new
@@ -249,8 +269,8 @@ export function WorkDetailPage() {
                       ? "한국 저작권 기준으로 아직 자유 이용이 어려운 판본이에요. IMSLP 원본 페이지에서 각자 판단해 이용해 주세요"
                       : "이용 가능 여부를 확인하는 중이에요"}
                   </p>
-                  {work.imslpUrl ? (
-                    <a className="btn btn-outline" href={work.imslpUrl} target="_blank" rel="noreferrer">
+                  {imslpTargetUrl ? (
+                    <a className="btn btn-outline" href={imslpTargetUrl} target="_blank" rel="noreferrer">
                       IMSLP에서 보기
                       <span className="material-icons" aria-hidden="true">
                         open_in_new
@@ -280,26 +300,35 @@ export function WorkDetailPage() {
         </InlineAlert>
       ) : null}
 
-      {others.length ? (
+      {others.length || imslpOnlyNote ? (
         <section className="other-editions" ref={othersRef}>
-          <button
-            className="btn btn-text collapsible-header"
-            type="button"
-            aria-expanded={expanded}
-            onClick={() => setExpandedOverride(!expanded)}
-          >
-            <span className="material-icons" aria-hidden="true">
-              {expanded ? "expand_more" : "chevron_right"}
-            </span>
-            {`다른 판본 보기 (${others.length}개)`}
-          </button>
-          {expanded ? (
-            <div className="other-editions-list">
-              {others.map((edition) => (
-                <EditionRow key={edition.id} edition={edition} imslpUrl={work.imslpUrl} onPreview={openLightbox} />
-              ))}
-            </div>
-          ) : null}
+          {others.length ? (
+            <>
+              <button
+                className="btn btn-text collapsible-header"
+                type="button"
+                aria-expanded={expanded}
+                onClick={() => setExpandedOverride(!expanded)}
+              >
+                <span className="material-icons" aria-hidden="true">
+                  {expanded ? "expand_more" : "chevron_right"}
+                </span>
+                {`다른 판본 보기 (${others.length}개)`}
+              </button>
+              {expanded ? (
+                <>
+                  <div className="other-editions-list">
+                    {others.map((edition) => (
+                      <EditionRow key={edition.id} edition={edition} imslpUrl={work.imslpUrl} onPreview={openLightbox} />
+                    ))}
+                  </div>
+                  {imslpOnlyNote}
+                </>
+              ) : null}
+            </>
+          ) : (
+            imslpOnlyNote
+          )}
         </section>
       ) : null}
 

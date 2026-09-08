@@ -11,7 +11,6 @@ import com.test.test.sheetmusic.composer.dto.ComposerCardDTO;
 import com.test.test.sheetmusic.composer.repository.ComposerRepository;
 import com.test.test.sheetmusic.edition.EditionDtoAssembler;
 import com.test.test.sheetmusic.edition.EditionEntity;
-import com.test.test.sheetmusic.edition.EditionKind;
 import com.test.test.sheetmusic.edition.dto.EditionDTO;
 import com.test.test.sheetmusic.edition.repository.EditionRepository;
 import com.test.test.sheetmusic.work.dto.ComposerRefDTO;
@@ -45,13 +44,6 @@ public class WorkQueryService {
     private static final int COMPOSER_CARD_LIMIT = 3;
     private static final int SAME_COMPOSER_LIMIT = 5;
     private static final int POPULAR_MAX_LIMIT = 20;
-    /**
-     * 곡 상세의 "다른 판본" 중 <b>파일 없는</b> 판본을 몇 개까지 실어 보내는가 (02 §3-3, 2026-09-07 개정).
-     * 수집 결과는 곡당 판본 70개인데 그중 파일이 있는 건 최대 2개다 — 전량을 주면 화면에
-     * "파일 없음 · IMSLP에서 보기" 행이 68줄 깔려 "판본 고민 없이 1개" 라는 제품 약속과 어긋난다.
-     * 파일 있는 판본은 개수를 우리가 통제하므로 상한을 두지 않는다.
-     */
-    private static final int FILELESS_OTHER_EDITION_LIMIT = 5;
 
     private final WorkRepository workRepository;
     private final ComposerRepository composerRepository;
@@ -137,20 +129,15 @@ public class WorkQueryService {
                 otherEntities.add(edition);
             }
         }
-        otherEntities.sort(Comparator
-                .comparingInt((EditionEntity e) -> e.getImslpDownloadCount() == null
-                        ? Integer.MIN_VALUE : e.getImslpDownloadCount()).reversed()
-                .thenComparing(EditionEntity::getId));
+        otherEntities.sort(EditionDtoAssembler.BY_IMSLP_DOWNLOADS);
 
-        // 파일 있는 판본은 전부(편성 무관), 파일 없는 판본은 전체 악보만 상위 5개 (02 §3-3, 2026-09-08 개정).
-        // 개수(otherEditionsTotal·downloadableOtherCount)는 잘림과 무관하되 목록과 같은 모집단으로 센다.
-        List<EditionEntity> fileless = new ArrayList<>();
+        // 줄이 되는 것은 파일 있는 판본뿐이고(편성 무관), 파일 없는 판본은 숫자 하나로 간다 (02 §3-3, 2026-09-08).
+        // 파일 없는 5칸은 "누를 수 없는 줄" 이라 접이식 헤더의 "(N개)" 가 받을 수 있는 판본 수가 아니게 된다.
+        int imslpOnlyCount = 0;
         int downloadableOtherCount = 0;
         for (EditionEntity edition : otherEntities) {
             if (!edition.hasFile()) {
-                if (isInScope(edition)) {
-                    fileless.add(edition);
-                }
+                imslpOnlyCount++;
                 continue;
             }
             EditionDTO dto = editionDtoAssembler.toDto(edition, files);
@@ -159,10 +146,10 @@ public class WorkQueryService {
                 downloadableOtherCount++;
             }
         }
-        int otherEditionsTotal = others.size() + fileless.size();
-        for (EditionEntity edition : fileless.stream().limit(FILELESS_OTHER_EDITION_LIMIT).toList()) {
-            others.add(editionDtoAssembler.toDto(edition, files));
-        }
+
+        // 추천이 없는 곡만 IMSLP 파일 페이지 후보를 내보낸다 (02 §3-3-2) — 추천이 있으면 링크 자리는 추천 카드 하나다.
+        EditionEntity imslpCandidate = recommendedId != null
+                ? null : EditionDtoAssembler.imslpCandidateOf(otherEntities);
 
         List<WorkEntity> sameComposer = workRepository.findSameComposerWorks(
                 work.getComposer().getId(), work.getId(), PageRequest.of(0, SAME_COMPOSER_LIMIT));
@@ -186,24 +173,12 @@ public class WorkQueryService {
                 .composerImslpUrl(work.getComposer().getImslpUrl())
                 .recommendedEdition(recommended)
                 .otherEditions(others)
-                .otherEditionsTotal(otherEditionsTotal)
+                .imslpOnlyCount(imslpOnlyCount)
+                .imslpCandidateEdition(imslpCandidate == null
+                        ? null : editionDtoAssembler.toDto(imslpCandidate, files))
                 .downloadableOtherCount(downloadableOtherCount)
                 .sameComposerWorks(workDtoAssembler.toSummaries(sameComposer))
                 .build();
-    }
-
-    /**
-     * 파일 없는 판본을 공개 곡 상세에 안내할 것인가 (02 §3-3, 2026-09-08 개정).
-     *
-     * <p>그 목록의 유일한 용도는 "IMSLP 에 가면 더 있다" 는 안내다. 실측은 곡당 판본 평균 79.8개(최대 207개)이고
-     * 그중 73~83%가 편곡({@code ARRANGEMENT})이라, 거르지 않으면 안내가 기타·성악·2대 피아노 스캔으로 채워진다 —
-     * 1차 범위가 <b>피아노 독주</b>(기획 §0-2)인데 안내로서 틀린 정보다. 파트보({@code PARTS})가 있다는 것은
-     * 애초에 앙상블 곡이라는 뜻이라 같이 뺀다. <b>파일 있는 판본은 편성과 무관하게 전부 남긴다</b> —
-     * 우리가 실제로 줄 수 있는 것이고, 편곡에 파일이 붙었다면 관리자가 의도해 붙인 것이다.
-     * 관리 화면(§4-7)은 계속 전부 보여 준다.
-     */
-    private static boolean isInScope(EditionEntity edition) {
-        return edition.getKind() == EditionKind.COMPLETE_SCORE;
     }
 
     // ===== §3-8 작곡가의 곡 =====

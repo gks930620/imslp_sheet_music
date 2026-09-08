@@ -2210,6 +2210,23 @@ a {
   cursor: pointer;
 }
 
+/* 03 §3-3 — 파일 없는 판본을 대신하는 회색 안내 한 줄 (기획 §F3-4) */
+.other-editions-imslp-note {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  padding: var(--space-3) var(--space-4);
+}
+
+.other-editions-imslp-note a {
+  color: var(--color-link);
+}
+
+.other-editions-imslp-note .material-icons {
+  font-size: var(--icon-size-sm);
+  vertical-align: middle;
+  margin-left: var(--space-1);
+}
+
 .other-editions-list {
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);

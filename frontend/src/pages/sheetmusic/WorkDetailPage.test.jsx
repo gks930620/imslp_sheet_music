@@ -8,7 +8,6 @@ import {
   edition,
   editionOtherFree,
   editionOtherRestricted,
-  editionOtherNoFile,
   workElise,
 } from "../../test/fixtures.js";
 import { expectNoText, expectText, findText } from "../../test/text.js";
@@ -229,14 +228,23 @@ describe("WorkDetailPage — 다른 판본 보기", () => {
 
   it("기본 접힘: '다른 판본 보기 (3개)' 만 보이고 펼치면 행이 나온다", async () => {
     const user = userEvent.setup();
-    renderDetail(workDetail({ otherEditions: [editionOtherFree, editionOtherRestricted, editionOtherNoFile] }));
+    // 줄이 되는 것은 파일 있는 판본뿐이다(§3-3, 기획 §F3-4) — 세 줄 모두 파일이 있다.
+    const unjudgedWithFile = edition({
+      id: 304,
+      publisher: "Schirmer",
+      koreaCopyright: "UNKNOWN",
+      previewUrl: null,
+      downloadable: false,
+      downloadUrl: null,
+    });
+    renderDetail(workDetail({ otherEditions: [editionOtherFree, editionOtherRestricted, unjudgedWithFile] }));
     await findText("다른 판본 보기 (3개)");
     expectNoText("Peters");
     await user.click(screen.getByRole("button", { name: /다른 판본 보기 \(3개\)/ }));
     expectText("전체 악보 · 2악장만");
     expectText("8쪽 · 1.1MB");
     expectText("Peters");
-    expectText("파일 없음");
+    expectText("Schirmer");
     // 추천 카드는 "PDF 받기 · 2.4MB", 판본 행은 정확히 "PDF 받기"(03_곡상세.md §판본 행) — 행 버튼만 정확 일치로 집는다
     expect(screen.getByRole("link", { name: "PDF 받기" })).toHaveAttribute("href", "/api/editions/302/download");
     expect(screen.getAllByRole("link", { name: /IMSLP에서 보기/ })).toHaveLength(2);

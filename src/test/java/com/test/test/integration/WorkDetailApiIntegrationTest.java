@@ -141,7 +141,7 @@ class WorkDetailApiIntegrationTest extends SheetMusicFixtureSupport {
     }
 
     @Test
-    @DisplayName("otherEditions: 추천 제외, 파일 있는 구간이 앞·구간 안 id 오름차순, downloadableOtherCount 는 파일+FREE 인 것만")
+    @DisplayName("otherEditions: 추천 제외 · 파일 있는 판본만 id 오름차순, 파일 없는 판본은 imslpOnlyCount 숫자로만")
     void otherEditions_orderAndCount() throws Exception {
         Tokens admin = loginAdmin();
         long composerId = createComposer(admin, "판본테스트", "Editions, Zz");
@@ -157,9 +157,14 @@ class WorkDetailApiIntegrationTest extends SheetMusicFixtureSupport {
 
         List<Long> otherIds = new ArrayList<>();
         data.path("otherEditions").forEach(e -> otherIds.add(e.path("id").asLong()));
-        // 02 §3-3: 파일 있는 구간이 앞, 파일 없는 구간이 뒤. 구간 안 정렬은
-        // imslp_download_count DESC NULLS LAST → id ASC (관리자 직접 등록이라 전부 null → id ASC)
-        assertThat(otherIds).containsExactly(e2, e3, e5, e4);
+        // 02 §3-3(2026-09-08 계약 통일): 줄로 펼치는 것은 "우리가 파일을 가진 판본" 뿐이고,
+        // 정렬은 imslp_download_count DESC NULLS LAST → id ASC (관리자 직접 등록이라 전부 null → id ASC).
+        // 파일 없는 e4 는 줄이 아니라 imslpOnlyCount 숫자 한 줄로만 안내된다 — 누를 수 없는 줄(버튼이
+        // "IMSLP에서 보기")을 같은 목록에 섞으면 접이식 헤더의 "(N개)" 가 "받을 수 있는 판본 수" 가 아니게 된다.
+        assertThat(otherIds).as("파일 없는 e4(id=%d) 는 줄이 아니다", e4).containsExactly(e2, e3, e5);
+        assertThat(data.path("imslpOnlyCount").asInt())
+                .as("추천 제외 · 파일 없는 판본 수 = e4 하나")
+                .isEqualTo(1);
         assertThat(data.path("downloadableOtherCount").asInt()).isEqualTo(2);
 
         for (JsonNode e : data.path("otherEditions")) {
@@ -174,18 +179,14 @@ class WorkDetailApiIntegrationTest extends SheetMusicFixtureSupport {
                 assertThat(e.path("downloadable").asBoolean()).isFalse();
                 assertThat(e.path("downloadUrl").isNull()).isTrue();
             }
-            if (id == e4) {
-                assertThat(e.path("hasFile").asBoolean()).isFalse();
-                assertThat(e.path("fileSize").isNull()).isTrue();
-                assertThat(e.path("previewUrl").isNull()).isTrue();
-                assertThat(e.path("downloadable").asBoolean()).isFalse();
-                assertThat(e.path("imslpFileUrl").asText()).isEqualTo("https://imslp.org/wiki/Special:ImagefromIndex/00001");
-            }
             if (id == e5) {
                 assertThat(e.path("scope").asText()).isEqualTo("MOVEMENT");
                 assertThat(e.path("movementNumber").asInt()).isEqualTo(2);
                 assertThat(e.path("downloadable").asBoolean()).isTrue();
             }
+            assertThat(e.path("hasFile").asBoolean())
+                    .as("줄로 나온 판본은 전부 파일이 있다 — 파일 없는 것은 imslpOnlyCount 로만 센다")
+                    .isTrue();
         }
     }
 

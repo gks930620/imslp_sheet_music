@@ -389,7 +389,16 @@ public class EditionEntity {
 
     /** 추천 후보 자격 (01_ERD §3-3). */
     public boolean isCandidateEligible() {
-        return this.kind == EditionKind.COMPLETE_SCORE && this.scope == EditionScope.COMPLETE && hasFile();
+        return isImslpCandidateEligible() && hasFile();
+    }
+
+    /**
+     * IMSLP 파일 페이지 후보 자격 (02 §3-3-2) — 추천 후보 규칙에서 <b>파일 조건만 뺀 것</b>.
+     * 준비 중 곡에는 파일이 없지만 "우리가 고른 판본" 링크는 내보내야 하기 때문이다.
+     * 편곡·파트보·발췌는 여기서 걸린다 — 1차 범위가 피아노 독주 전곡이다(기획 §0-2 · §F3-7).
+     */
+    public boolean isImslpCandidateEligible() {
+        return this.kind == EditionKind.COMPLETE_SCORE && this.scope == EditionScope.COMPLETE;
     }
 
     /** 이 판본이 자기 곡의 추천으로 지정돼 있는가 — 추천의 단일 기준은 곡 쪽 필드다(02 §4-7). */

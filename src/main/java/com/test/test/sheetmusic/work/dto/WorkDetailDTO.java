@@ -36,10 +36,25 @@ public class WorkDetailDTO {
     private String imslpUrl;
     private String composerImslpUrl;
     private EditionDTO recommendedEdition;
+    /**
+     * 추천을 뺀 <b>파일 있는</b> 판본 전부 (02 §3-3, 2026-09-08 계약 통일 / 기획 §F3-4).
+     * 편성으로 거르지 않고 잘리지도 않는다 — 줄로 펼치는 것은 "우리가 줄 수 있는 판본" 뿐이다.
+     */
     private List<EditionDTO> otherEditions;
-    /** 추천을 뺀 <b>전체</b> 판본 수 (02 §3-3). {@code otherEditions.size()} 보다 크면 목록이 잘린 것이다. */
-    private int otherEditionsTotal;
-    /** 전체 판본 중 downloadable=true 수 — 잘린 목록이 아니라 전체 기준이다 (02 §3-3). */
+    /**
+     * 추천을 뺀 <b>파일 없는</b> 판본 수 (02 §3-3, 2026-09-08 신설) —
+     * "IMSLP 에는 이 곡의 다른 악보가 N개 더 있어요" 한 줄이 쓰는 값이고 0 이면 화면이 줄을 만들지 않는다.
+     * <b>편성으로 거르지 않는다</b>: 이 숫자가 안내하는 곳은 IMSLP 작품 페이지이고 거기 있는 것은
+     * 편곡·파트보를 포함한 전부라, 걸러 세면 사용자가 링크를 눌러 보는 것과 어긋난다.
+     */
+    private int imslpOnlyCount;
+    /**
+     * 못 주는 곡이 내보내는 IMSLP 파일 페이지의 재료 (02 §3-3-2, 기획 §F3-7 · §10-5).
+     * {@code recommendedEdition == null} 일 때만 값이 있고, 전체 악보·전곡 판본이 없으면 null 이다.
+     * 파일 없는 판본이므로 {@code hasFile=false}·{@code downloadable=false} — 다운로드 버튼의 근거가 아니다.
+     */
+    private EditionDTO imslpCandidateEdition;
+    /** 전체 판본 중 downloadable=true 수 — 목록과 무관하게 전체 기준이다 (02 §3-3). */
     private int downloadableOtherCount;
     private List<WorkSummaryDTO> sameComposerWorks;
 }

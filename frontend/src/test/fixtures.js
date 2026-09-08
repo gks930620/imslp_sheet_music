@@ -163,6 +163,11 @@ export const editionOtherRestricted = {
   downloadUrl: null,
 };
 
+/**
+ * 파일 없는 판본. 2026-09-08 계약 통일(§3-3, 기획 §F3-4) 이후 공개 곡 상세의 otherEditions 에는
+ * <b>들어오지 않는다</b> — 파일 없는 판본은 줄이 아니라 imslpOnlyCount 숫자 한 줄로만 안내된다.
+ * 관리 화면(§4-7)은 그대로 전부 보므로 그쪽 픽스처로만 쓴다.
+ */
 export const editionOtherNoFile = {
   ...editionRecommended,
   id: 304,
@@ -201,6 +206,11 @@ export function workDetail(overrides = {}) {
     composerImslpUrl: "https://imslp.org/wiki/Category:Beethoven,_Ludwig_van",
     recommendedEdition: editionRecommended,
     otherEditions: [],
+    imslpOnlyCount: 0,
+    // §3-3-2 imslpCandidateEdition — recommendedEdition 이 있으면 **항상 null** 이다(두 자리에서 같은
+    // 링크를 만들 수 있으면 화면마다 어느 쪽을 쓸지 갈린다). 준비 중 곡을 만들려면
+    // { status: "PREPARING", recommendedEdition: null, imslpCandidateEdition: edition({ hasFile: false }) }.
+    imslpCandidateEdition: null,
     downloadableOtherCount: 0,
     sameComposerWorks: [workElise],
     ...overrides,

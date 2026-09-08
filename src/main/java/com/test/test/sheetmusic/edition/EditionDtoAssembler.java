@@ -21,6 +21,14 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class EditionDtoAssembler {
 
+    /**
+     * 판본 정렬의 공통 순서 (02 §3-3 · §3-3-2 · §4-7): {@code imslp_download_count DESC NULLS LAST, id ASC}.
+     * "다른 판본" 목록·IMSLP 후보·관리 목록이 같은 순서를 쓰므로 한 곳에 둔다.
+     */
+    public static final Comparator<EditionEntity> BY_IMSLP_DOWNLOADS =
+            Comparator.comparingInt(EditionDtoAssembler::downloads).reversed()
+                    .thenComparing(EditionEntity::getId);
+
     private final FileRepository fileRepository;
 
     /** 판본들이 참조하는 files 행을 id → 엔티티로 모아 온다. */
@@ -176,6 +184,30 @@ public class EditionDtoAssembler {
     }
 
     /**
+     * 추천 없는 곡이 내보내는 IMSLP 파일 페이지 후보 (02 §3-3-2, 기획 §F3-7 · §10-5).
+     *
+     * <p>{@code kind = COMPLETE_SCORE} · {@code scope = COMPLETE} 인 판본 중
+     * {@code imslp_download_count DESC NULLS LAST, id ASC} 첫 번째. <b>파일 유무는 보지 않는다</b> —
+     * {@link #candidateOf} (01_ERD §3-3 추천 후보)에서 파일 조건만 뺀 규칙이고, 준비 중 곡에는 파일이 없기 때문이다.
+     * 편곡·발췌를 "우리가 고른 판본" 이라며 내보내지 않으므로 자격이 없으면 null 이고, 화면은 그때만 작품 페이지로 폴백한다.
+     *
+     * @param editions 추천을 뺀 판본들 — 정렬은 이 메서드가 하지 않고 {@link #BY_IMSLP_DOWNLOADS} 로 이미 정렬된 순서를 쓴다
+     */
+    public static EditionEntity imslpCandidateOf(List<EditionEntity> editions) {
+        EditionEntity best = null;
+        for (EditionEntity edition : editions) {
+            if (!edition.isImslpCandidateEligible()) {
+                continue;
+            }
+            if (best == null || downloads(edition) > downloads(best)
+                    || (downloads(edition) == downloads(best) && edition.getId() < best.getId())) {
+                best = edition;
+            }
+        }
+        return best;
+    }
+
+    /**
      * 관리 화면 판본 정렬 (02 §4-7): 추천 → 후보 → 파일 있음 → 파일 없음, 각 구간은 IMSLP 다운로드 수 DESC → id ASC.
      */
     public static List<EditionEntity> sortForAdmin(List<EditionEntity> editions,
@@ -183,8 +215,7 @@ public class EditionDtoAssembler {
         List<EditionEntity> sorted = new ArrayList<>(editions);
         sorted.sort(Comparator
                 .comparingInt((EditionEntity e) -> group(e, recommendedEditionId, candidateEditionId))
-                .thenComparing(Comparator.comparingInt(EditionDtoAssembler::downloads).reversed())
-                .thenComparing(EditionEntity::getId));
+                .thenComparing(BY_IMSLP_DOWNLOADS));
         return sorted;
     }
 
