@@ -7,7 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * {@link ImslpClient#downloadFile(String, Path)} 의 결과 — 임시 파일로 받은 바이트의 메타.
+ * {@link ImslpClient#downloadResolvedFile(ImslpFileLocation, Path)} 의 결과 — 임시 파일로 받은 바이트의 메타.
  * 검증(매직바이트·크기)과 저장 전략 업로드, 임시 파일 삭제는 호출자 책임.
  */
 @Getter

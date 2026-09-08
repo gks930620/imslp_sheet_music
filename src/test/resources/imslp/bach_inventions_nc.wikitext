@@ -1,0 +1,43 @@
+{{#fte:imslppage
+
+| *****AUDIO***** =
+| *****FILES***** =
+====Complete====
+{{#fte:imslpfile
+|File Name 1=Bach_-_Inventions_-_BGA.pdf
+|File Description 1=Complete Score
+|Editor={{LinkEd|Wilhelm|Rust|1822|1892}}
+|Image Type=Normal Scan
+|Scanner=Unknown
+|Uploader=[[User:Feldmahler|Feldmahler]]
+|Date Submitted=2006/4/2
+|Publisher Information={{P|Breitkopf|Breitkopf und Härtel|Leipzig||1863|B.W. III|}}
+|Copyright=Creative Commons Attribution-NonCommercial 4.0
+|Misc. Notes=
+}}
+{{#fte:imslpfile
+|File Name 1=Bach_-_Inventions_-_Typeset.pdf
+|File Description 1=Complete Score (typeset)
+|Image Type=Typeset
+|Scanner=Editor
+|Uploader=[[User:Typesetter|Typesetter]]
+|Date Submitted=2019/1/2
+|Publisher Information={{P||Typesetter|||2019||}}
+|Copyright=Creative Commons Attribution-NonCommercial-NoDerivatives 4.0
+|Misc. Notes=
+}}
+
+| *****WORK INFO*****
+
+|Work Title=15 Inventions
+|Alternative Title=Zweistimmige Inventionen
+|Opus/Catalogue Number=BWV 772-786
+|Key=
+|Number of Movements/Sections=15 pieces
+|Average Duration=25 minutes
+|Year/Date of Composition=1723
+|Year of First Publication=1801
+|Piece Style=Baroque
+|Instrumentation=harpsichord
+|Tags=inventions ; hpd
+| *****END OF TEMPLATE***** }}

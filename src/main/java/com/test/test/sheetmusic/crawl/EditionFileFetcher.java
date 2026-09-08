@@ -47,10 +47,26 @@ public class EditionFileFetcher {
         }
     }
 
-    /** 워커도 쓰는 경로 — 파일 1개를 받아 저장 전략에 올린다. 실패하면 예외. */
+    /**
+     * 워커도 쓰는 경로 — 파일 1개를 받아 저장 전략에 올린다. 실패하면 예외.
+     *
+     * <p>파일 대기 15초는 <b>여기 한 곳</b>에서만 건다(03 §3, 기획 §9-1). 수집 워커의 파일 루프와
+     * 개별 받아오기(02 §5-7)가 모두 이 메서드를 파일마다 1회 지나므로, 한 줄로 두 경로 전부
+     * 파일 수만큼 정확히 1회씩 걸린다. 호출부에 또 넣으면 파일당 30초가 되어 중복이다.
+     *
+     * <p><b>그 한 줄의 자리까지 계약이다</b> — {@code resolveFileUrl()}(대기 페이지 GET) <b>다음</b>,
+     * {@code downloadResolvedFile()}(파일 GET) <b>앞</b>. 브라우저가 하는 순서(페이지 → 15초 → 파일)와 같기 때문이다.
+     * 카운트다운은 대기 페이지를 받은 순간부터 돌기 시작한다 — 그래서 대기를 페이지 <b>앞</b>에 두면
+     * 15초를 다 쓴 뒤에 페이지를 받아 0.3초 만에 파일을 치게 되고, 서버에는 정확히
+     * "카운트다운을 안 기다린 클라이언트"로 보인다(2026-09-07 정정).
+     * 덧붙여 대기 페이지가 무응답이면 {@code resolveFileUrl()} 이 예외로 끝나서, 받을 수 없는 파일 때문에
+     * 15초를 허비하지 않고 PAUSED 백오프로 빨리 물러설 수 있다.
+     */
     public EditionFileUploadDTO downloadAndStore(String imslpFileId, Path directory) {
         imslpGate.awaitRequestSlot();
-        ImslpDownloadedFile downloaded = imslpClient.downloadFile(imslpFileId, directory);
+        ImslpFileLocation location = imslpClient.resolveFileUrl(imslpFileId);
+        imslpGate.awaitFileWait();
+        ImslpDownloadedFile downloaded = imslpClient.downloadResolvedFile(location, directory);
         validate(downloaded);
         return editionFileService.storeFetchedPdf(downloaded.getPath(),
                 downloaded.getFileName() == null ? "IMSLP" + imslpFileId + ".pdf" : downloaded.getFileName(),

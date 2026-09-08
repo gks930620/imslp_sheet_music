@@ -16,6 +16,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /** 수집 작업 (01_ERD §3-8). 진행 상태는 전부 DB 에 둔다(03 §3). */
 @Entity
@@ -33,6 +35,7 @@ public class CrawlJobEntity {
     private Long id;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "status", length = 30, nullable = false)
     private CrawlJobStatus status;
 
@@ -64,6 +67,7 @@ public class CrawlJobEntity {
     private Long currentItemId;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "current_stage", length = 30)
     private CrawlStage currentStage;
 

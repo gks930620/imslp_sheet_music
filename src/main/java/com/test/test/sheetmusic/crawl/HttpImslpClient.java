@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.GZIPInputStream;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -39,6 +40,7 @@ import org.springframework.stereotype.Component;
  * <p>통합테스트는 이 구현을 쓰지 않는다({@code FakeImslpClient} 가 {@code @Primary}) — 실제 네트워크를 치는 테스트는 없다.
  */
 @Component
+@RequiredArgsConstructor
 @Slf4j
 public class HttpImslpClient implements ImslpClient {
 
@@ -53,6 +55,9 @@ public class HttpImslpClient implements ImslpClient {
             .connectTimeout(CONNECT_TIMEOUT)
             .build();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /** 파일 다운로드는 HTTP 를 2회 친다(대기 페이지 → 파일 호스트) — 그 사이 간격도 게이트로 지킨다. */
+    private final ImslpGate imslpGate;
 
     @Value("${app.imslp.user-agent:SheetMusicKR/0.1}")
     private String userAgent;
@@ -101,17 +106,34 @@ public class HttpImslpClient implements ImslpClient {
     }
 
     @Override
-    public ImslpDownloadedFile downloadFile(String imslpFileId, Path targetDirectory) {
+    public ImslpFileLocation resolveFileUrl(String imslpFileId) {
         String waitPage = getText(SITE + "/wiki/Special:ImagefromIndex/" + imslpFileId, READ_TIMEOUT, imslpFileId);
         Document document = Jsoup.parse(waitPage, SITE);
         Element marker = document.selectFirst("span#sm_dl_wait[data-id]");
         if (marker == null) {
+            // 200 인데 카운트다운이 없다 = 게이트/점검/차단 안내 페이지일 수 있다. 본문 전체는 남기지 않고
+            // 길이와 제목만 남긴다(로그 폭주·불필요한 내용 저장 방지).
+            log.warn("파일 대기 페이지에 sm_dl_wait 가 없습니다 - imslpFileId: {}, 길이: {}, title: {}",
+                    imslpFileId, waitPage.length(), document.title());
             throw new ImslpUnavailableException("파일 대기 페이지를 읽지 못했습니다: " + imslpFileId);
         }
         String fileUrl = marker.attr("data-id");
         if (fileUrl.isBlank()) {
             throw new ImslpUnavailableException("파일 주소가 비어 있습니다: " + imslpFileId);
         }
+        // 여기서 카운트다운이 시작된다 — 15초는 호출부(EditionFileFetcher.downloadAndStore)가
+        // 이 메서드가 돌아온 "다음" 에 건다. 여기에 넣으면 호출부 대기와 겹쳐 파일당 30초가 된다.
+        return ImslpFileLocation.builder().imslpFileId(imslpFileId).fileUrl(fileUrl).build();
+    }
+
+    @Override
+    public ImslpDownloadedFile downloadResolvedFile(ImslpFileLocation location, Path targetDirectory) {
+        String imslpFileId = location.getImslpFileId();
+        String fileUrl = location.getFileUrl();
+
+        // 다음 요청과의 최소 간격(robots Crawl-delay: 2)을 채우고 lastRequestAt 을 이 요청 시각으로 갱신한다.
+        // 호출부의 파일 대기(15초)가 앞에 있으므로 여기서 실제로 자는 시간은 0 이다 (03 §3).
+        imslpGate.awaitRequestSlot();
 
         // 100MB 악보를 힙에 올리지 않는다 — 응답을 스트림으로 받아 임시 파일로 흘려보낸다.
         HttpResponse<InputStream> response = send(request(fileUrl, FILE_TIMEOUT),
@@ -119,6 +141,9 @@ public class HttpImslpClient implements ImslpClient {
         int status = response.statusCode();
         if (status != 200) {
             closeQuietly(response.body());
+            log.warn("파일 호스트 응답 비정상 - imslpFileId: {}, 상태: {}, host: {}, location: {}",
+                    imslpFileId, status, hostOf(fileUrl),
+                    response.headers().firstValue("location").orElse("-"));
             if (status == 404) {
                 throw new ImslpPageNotFoundException(fileUrl);
             }
@@ -138,6 +163,8 @@ public class HttpImslpClient implements ImslpClient {
         } catch (IOException e) {
             throw new ImslpUnavailableException("받은 파일을 저장하지 못했습니다: " + fileUrl, e);
         }
+
+        log.info("IMSLP 파일 수신 완료 - imslpFileId: {}, host: {}, {}바이트", imslpFileId, hostOf(fileUrl), written);
 
         // gzip 이면 Content-Length 는 압축 크기라 실제 바이트 수와 비교할 수 없다 → 받은 크기를 그대로 쓴다.
         long declaredSize = gzipped
@@ -162,9 +189,14 @@ public class HttpImslpClient implements ImslpClient {
         }
         if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
             // 봇 게이트(friendlyredirect) 로 튕긴 경우 — 쿠키를 보냈는데도 302 면 무응답으로 본다.
+            // 어디로 튕겼는지(Location)가 게이트 종류를 가르는 유일한 단서다.
+            log.warn("IMSLP 리다이렉트 - 상태: {}, url: {}, location: {}",
+                    status, url, response.headers().firstValue("location").orElse("-"));
             throw new ImslpUnavailableException("리다이렉트로 막혔습니다(" + status + "): " + url);
         }
         if (status == 429 || status >= 500) {
+            log.warn("IMSLP 응답 상태 - 상태: {}, url: {}, retry-after: {}",
+                    status, url, response.headers().firstValue("retry-after").orElse("-"));
             throw new ImslpUnavailableException("IMSLP 응답 상태 " + status + ": " + url);
         }
         if (status != 200) {
@@ -192,6 +224,16 @@ public class HttpImslpClient implements ImslpClient {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ImslpUnavailableException("IMSLP 요청이 중단됐습니다: " + request.uri(), e);
+        }
+    }
+
+    /** 로그용 — 파일 호스트는 요청마다 바뀐다(s9·ks15…). 전체 URL 은 길어서 호스트만 남긴다. */
+    private static String hostOf(String url) {
+        try {
+            String host = URI.create(url).getHost();
+            return host == null ? "-" : host;
+        } catch (IllegalArgumentException e) {
+            return "-";
         }
     }
 

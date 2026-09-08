@@ -1,0 +1,9 @@
+Bach,_Johann_Sebastian
+Inventions
+For_harpsichord
+Scores_featuring_the_harpsichord
+For_1_player
+Baroque_style
+Pages_with_arrangements
+For_piano_(arr)
+Scores_featuring_the_piano_(arr)

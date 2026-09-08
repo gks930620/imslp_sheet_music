@@ -46,12 +46,17 @@ public abstract class CrawlTestSupport extends AdminApiTestSupport {
     @Autowired
     protected FakeImslpClient fakeImslp;
 
+    /** 그 테스트가 IMSLP 게이트를 어떻게 통과했는지 — 파일당 15초 대기 계약 검증용 (기획 §9-1, 03 §3). */
+    @Autowired
+    protected ImslpCallLog imslpCalls;
+
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void resetFakeImslp() {
         fakeImslp.reset();
+        imslpCalls.reset();
     }
 
     @AfterEach

@@ -10,9 +10,17 @@ import java.nio.file.Path;
  *
  * <p>구현체(백엔드 담당):
  * <ul>
- *   <li>{@code HttpImslpClient} — JDK HttpClient, 요청 간격 2초(app.imslp.request-interval-ms), 파일 대기 15초(app.imslp.file-wait-ms),
- *       단일 커넥션, gzip 수동 해제, 봇 게이트 쿠키(redirectPassed=1, imslpdisclaimeraccepted=yes), UA 에 서비스명+연락처.</li>
+ *   <li>{@code HttpImslpClient} — JDK HttpClient, 요청 간격 2초(app.imslp.request-interval-ms),
+ *       단일 커넥션, gzip 수동 해제, 봇 게이트 쿠키(redirectPassed=1, imslpdisclaimeraccepted=yes), UA 에 서비스명+연락처.
+ *       <b>파일 대기 15초는 구현체가 걸지 않는다</b> — 호출자({@code EditionFileFetcher})가 두 메서드 사이에 건다.</li>
  * </ul>
+ *
+ * <p><b>파일 1개를 받는 순서는 계약이다</b> (기획 §9-1, 03 §3) —
+ * {@link #resolveFileUrl(String)}(대기 페이지 GET) → {@code ImslpGate.awaitFileWait()}(카운트다운) →
+ * {@link #downloadResolvedFile(ImslpFileLocation, Path)}(파일 GET). 브라우저와 같은 순서다.
+ * 대기를 대기 페이지 <b>앞</b>에 두면 카운트다운을 띄운 뒤 0초 만에 파일을 치는 셈이라, 서버에는 정확히
+ * "카운트다운을 안 기다린 클라이언트"로 보인다. 그래서 이 인터페이스는 두 단계를 굳이 나눠 둔다 —
+ * 한 메서드 안에 감추면 대기 자리를 통합테스트로 관찰할 수 없다({@code ImslpFileWaitPolicyIntegrationTest}).
  *
  * <p>예외 계약 (워커가 항목 상태로 옮긴다 — 02 §6-10):
  * <ul>
@@ -39,14 +47,29 @@ public interface ImslpClient {
     ImslpWikitextPage fetchWikitext(String canonicalUrl);
 
     /**
-     * IMSLP 파일 1개를 받아 {@code targetDirectory} 아래 임시 파일로 저장한다.
-     * ({@code Special:ImagefromIndex/{id}} → 대기 페이지 {@code span#sm_dl_wait[data-id]} → 15초 대기 → 파일 호스트)
+     * <b>1단계 — 대기 페이지를 열어 파일 주소를 읽는다.</b>
+     * {@code GET Special:ImagefromIndex/{id}} → {@code span#sm_dl_wait[data-id]}.
+     *
+     * <p>여기서 <b>기다리지 않는다</b>. 이 메서드가 돌아온 순간이 카운트다운의 시작점이고,
+     * 15초를 재우는 것은 호출자({@code EditionFileFetcher.downloadAndStore})의 일이다.
+     * 구현체가 안에서 자면 호출자의 대기와 겹쳐 파일당 30초가 된다.
+     *
+     * <p>대기 페이지가 200 인데 {@code sm_dl_wait} 가 없으면(봇 게이트·점검 안내) {@link ImslpUnavailableException} —
+     * 이때 호출자는 카운트다운을 태우지 않고 그 파일을 포기한다.
+     *
+     * @param imslpFileId IMSLP 파일 번호 원문 (앞자리 0 포함, 예: {@code "00014"})
+     */
+    ImslpFileLocation resolveFileUrl(String imslpFileId);
+
+    /**
+     * <b>2단계 — 해석된 주소에서 파일을 받아</b> {@code targetDirectory} 아래 임시 파일로 저장한다.
+     * 호출자가 {@code awaitFileWait()} 로 카운트다운을 채운 <b>뒤</b> 부른다.
      *
      * <p>받은 바이트가 PDF 인지({@code %PDF} 매직바이트, Content-Length 일치)는 <b>호출자가 검증</b>한다 —
      * 테스트 대역이 손상 파일을 흉내 낼 수 있어야 하기 때문. 검증 실패는 항목 FAILED / FILE_DOWNLOAD_FAILED.
      *
-     * @param imslpFileId     IMSLP 파일 번호 원문 (앞자리 0 포함, 예: {@code "00014"})
+     * @param location        {@link #resolveFileUrl(String)} 가 방금 돌려준 1회용 주소
      * @param targetDirectory 임시 파일을 만들 디렉터리 (호출자가 정리)
      */
-    ImslpDownloadedFile downloadFile(String imslpFileId, Path targetDirectory);
+    ImslpDownloadedFile downloadResolvedFile(ImslpFileLocation location, Path targetDirectory);
 }

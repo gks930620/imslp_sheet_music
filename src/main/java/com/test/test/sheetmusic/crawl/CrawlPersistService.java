@@ -18,10 +18,12 @@ import com.test.test.sheetmusic.work.WorkEntity;
 import com.test.test.sheetmusic.work.repository.WorkRepository;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 외부 HTTP·파일 저장은 이 클래스 밖(트랜잭션 밖)에서 끝낸 뒤 결과만 넘겨 받는다.
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class CrawlPersistService {
 
@@ -60,14 +63,37 @@ public class CrawlPersistService {
                 .ifPresent(edition -> edition.markFetchFailed(truncate(message, 300)));
     }
 
-    /** 파일 수신 성공 — files 행 연결 + 판본 갱신. */
+    /**
+     * 파일 수신 성공 — files 행 연결 + 판본 갱신 (02 §5-7, 01_ERD §7).
+     *
+     * <p><b>붙이기 직전에 파일 유무를 다시 본다.</b> §5-7 은 <i>요청 시점</i>에만 "이미 파일이 있는 판본"을 막는데
+     * 실제 수신은 수십 초 뒤다(대기 15초 + 전송). 그 사이 관리자가 §5-3 으로 PDF 를 붙였으면 수집 파일이 그것을
+     * 밀어내고, 밀려난 {@code files} 행은 {@code ref_id = 판본 id} 라 orphan 배치({@code ref_id = 0} 만 본다)도
+     * 못 지워 DB 행과 디스크 바이트가 영구히 남는다. 그래서 <b>관리자 입력이 이기고 받아온 파일을 버린다</b>
+     * (수집이 관리자 입력을 덮지 않는다는 이 저장소의 원칙 — 02 §6-10·§6-11 과 같은 방향).
+     */
     @Transactional
     public void attachFetchedFile(Long editionId, EditionFileUploadDTO uploaded) {
-        editionRepository.findById(editionId).ifPresent(edition -> {
-            edition.attachFetchedFile(uploaded.getFileId(), uploaded.getPreviewFileId(),
-                    uploaded.getPageCount(), Instant.now());
-            editionFileService.linkToEdition(editionId, uploaded.getFileId(), uploaded.getPreviewFileId());
-        });
+        EditionEntity edition = editionRepository.findById(editionId).orElse(null);
+        if (edition == null) {
+            log.warn("받아온 파일을 붙일 판본이 없어 파일을 버립니다 - editionId: {}", editionId);
+            discard(uploaded);
+            return;
+        }
+        if (edition.hasFile()) {
+            log.info("받아오는 사이 판본에 파일이 생겨 받아온 파일을 버립니다 - editionId: {}", editionId);
+            edition.clearFetchRequest();
+            discard(uploaded);
+            return;
+        }
+        edition.attachFetchedFile(uploaded.getFileId(), uploaded.getPreviewFileId(),
+                uploaded.getPageCount(), Instant.now());
+        editionFileService.linkToEdition(editionId, uploaded.getFileId(), uploaded.getPreviewFileId());
+    }
+
+    /** 붙이지 못한 수신 파일 정리 — files 행 삭제(바이트는 커밋 후). 아직 연결 전이라 ref_id = 0 이다. */
+    private void discard(EditionFileUploadDTO uploaded) {
+        editionFileService.deleteFiles(Arrays.asList(uploaded.getFileId(), uploaded.getPreviewFileId()));
     }
 
 
@@ -86,6 +112,9 @@ public class CrawlPersistService {
                     .hiddenReason(pianoSolo ? null : HiddenReason.NOT_PIANO_SOLO)
                     .build();
             workRepository.save(work);
+        } else {
+            // 재수집(REFRESH·ATTACH)은 숨김을 다시 계산한다 — 수집이 숨긴 것만 수집이 푼다 (02 §6-11).
+            work.reopenIfCrawlerHid(pianoSolo);
         }
         work.fillImslpUrlIfBlank(parsed.getCanonicalUrl());
         work.fillMissingMetadata(parsed.getCompositionYear(), parsed.getMusicalKey(), parsed.getMovements());
@@ -94,13 +123,16 @@ public class CrawlPersistService {
 
         List<EditionEntity> editions = new ArrayList<>();
         for (ParsedEdition parsedEdition : parsed.getEditions()) {
-            editions.add(upsertEdition(work, parsedEdition));
+            EditionEntity edition = upsertEdition(work, parsedEdition);
+            if (edition != null) {
+                editions.add(edition);
+            }
         }
         workRepository.flush();
 
         return CrawlUpsertResult.builder()
                 .workId(work.getId())
-                .editionCount(parsed.getEditions().size())
+                .editionCount(editions.size())
                 .hidden(work.isHidden())
                 .fetchTargets(fetchTargets(editions))
                 .build();
@@ -122,8 +154,18 @@ public class CrawlPersistService {
         return composer;
     }
 
+    /**
+     * 판본 1개 upsert. {@code imslp_file_id} 는 전역 UNIQUE 라 조회도 전역이다 — 그래서 찾은 판본이
+     * <b>다른 곡의 것</b>이면 건드리지 않고 건너뛴다(01_ERD §7, 2026-09-07). 조용히 갱신하거나 곡 사이를
+     * 옮겨 다니면 판본 수 집계와 추천이 어긋난다. 건너뛰면 {@code null}.
+     */
     private EditionEntity upsertEdition(WorkEntity work, ParsedEdition parsed) {
         EditionEntity edition = editionRepository.findByImslpFileId(parsed.getImslpFileId()).orElse(null);
+        if (edition != null && !edition.getWork().getId().equals(work.getId())) {
+            log.warn("같은 IMSLP 파일 번호가 다른 곡에 이미 있어 건너뜁니다 - imslpFileId: {}, 기존 곡: {}, 수집 중인 곡: {}",
+                    parsed.getImslpFileId(), edition.getWork().getId(), work.getId());
+            return null;
+        }
         if (edition == null) {
             edition = EditionEntity.builder()
                     .work(work)

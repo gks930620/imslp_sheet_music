@@ -132,7 +132,15 @@ public class CrawlWorker {
                     "판본 %d개, 파일 %d개 받음".formatted(upserted.getEditionCount(), fileCount));
         } catch (ImslpPageNotFoundException e) {
             crawlPersistService.finishItemFailed(jobId, itemId, CrawlFailReason.PAGE_NOT_FOUND, null, null, null);
+        } catch (FileStageUnavailableException e) {
+            // 파일 단계 무응답 — 사유는 IMSLP_UNAVAILABLE 그대로(302·429·5xx 는 "물러서라" 신호라
+            // 연속 3항목 PAUSED 백오프를 타야 한다). 단 이미 저장된 판본 수와 그때까지 받은 파일 수는
+            // 남긴다 — 관리자가 "곡·판본은 저장됐고 파일만 빈다"를 보고 §5-7 로 재시도할 수 있어야 한다 (02 §6-10).
+            crawlPersistService.finishItemFailed(jobId, itemId, CrawlFailReason.IMSLP_UNAVAILABLE,
+                    e.getWorkId(), e.getEditionCount(), e.getFileCount());
+            pauseOrStopIfUnavailable(jobId);
         } catch (ImslpUnavailableException e) {
+            log.warn("메타 읽기 무응답 - itemId: {}, url: {}, 사유: {}", itemId, url, e.getMessage(), e);
             crawlPersistService.finishItemFailed(jobId, itemId, CrawlFailReason.IMSLP_UNAVAILABLE,
                     upserted == null ? null : upserted.getWorkId(), null, null);
             pauseOrStopIfUnavailable(jobId);
@@ -178,7 +186,14 @@ public class CrawlWorker {
                     crawlPersistService.attachFetchedFile(target.getEditionId(), uploaded);
                     succeeded++;
                 } catch (ImslpUnavailableException e) {
-                    throw e;
+                    // 무응답도 사유를 남긴다 — 관리자 화면에는 "IMSLP가 응답하지 않아요" 한 줄만 보이므로
+                    // 302(봇 게이트)·429·타임아웃 중 무엇이었는지는 로그가 유일한 단서다 (2026-09-07).
+                    log.warn("파일 수신 무응답 - imslpFileId: {}, {}/{}번째, 사유: {}",
+                            target.getImslpFileId(), index, total, e.getMessage(), e);
+                    // 무응답이면 남은 파일을 더 조르지 않고 즉시 빠져나간다 — 다만 진행 상황(판본 수·성공 파일 수)은
+                    // 예외에 실어 보낸다. 그냥 던지면 항목이 "판본 0·파일 0" 으로 남아 재시도 판단이 불가능하다.
+                    throw new FileStageUnavailableException(e, upserted.getWorkId(),
+                            upserted.getEditionCount(), succeeded);
                 } catch (Exception e) {
                     log.warn("파일 수신 실패 - imslpFileId: {}, 사유: {}", target.getImslpFileId(), e.getMessage());
                     crawlPersistService.markFetchFailed(target.getEditionId(), CrawlTempFiles.message(e));
@@ -248,6 +263,36 @@ public class CrawlWorker {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * 파일 수신 중 IMSLP 가 무응답이었을 때 — 사유는 {@code IMSLP_UNAVAILABLE} 그대로 두되(백오프 유지)
+     * 그때까지의 진행 상황을 함께 나른다 (02 §6-10, 2026-09-07).
+     */
+    private static class FileStageUnavailableException extends ImslpUnavailableException {
+
+        private final transient Long workId;
+        private final int editionCount;
+        private final int fileCount;
+
+        FileStageUnavailableException(ImslpUnavailableException cause, Long workId, int editionCount, int fileCount) {
+            super(cause.getMessage(), cause);
+            this.workId = workId;
+            this.editionCount = editionCount;
+            this.fileCount = fileCount;
+        }
+
+        Long getWorkId() {
+            return workId;
+        }
+
+        Integer getEditionCount() {
+            return editionCount;
+        }
+
+        Integer getFileCount() {
+            return fileCount;
         }
     }
 
