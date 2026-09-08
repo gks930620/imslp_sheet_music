@@ -19,6 +19,7 @@ export const workMoonlight = {
   fileSize: 1059957,
   previewUrl: "/uploads/3f2a-c1.png",
   matchedAlias: null,
+  scopeNote: null,
 };
 
 export const workElise = {
@@ -33,6 +34,7 @@ export const workElise = {
   fileSize: 655360,
   previewUrl: null,
   matchedAlias: null,
+  scopeNote: null,
 };
 
 export const workNocturne2 = {
@@ -47,7 +49,13 @@ export const workNocturne2 = {
   fileSize: null,
   previewUrl: null,
   matchedAlias: "녹턴",
+  scopeNote: null,
 };
+
+/** §2-2-1 scopeNote — 할 말이 없으면 필드가 통째로 null 이고, codes 는 비어 있지 않다 */
+export function scopeNote(codes, movementNumber = null) {
+  return { codes, movementNumber };
+}
 
 export function workSummary(overrides = {}) {
   return { ...workMoonlight, ...overrides };
@@ -544,6 +552,7 @@ export function adminWorkDetail(overrides = {}) {
     musicalKey: "C-sharp minor",
     movements: "3 movements",
     movementPageGuide: null,
+    collectionGuide: "이 악보에는 3개 악장이 들어 있어요 — 흔히 아는 느린 선율은 1악장이에요",
     imslpUrl: "https://imslp.org/wiki/Piano_Sonata_No.14,_Op.27_No.2_(Beethoven,_Ludwig_van)",
     hidden: false,
     hiddenReason: null,

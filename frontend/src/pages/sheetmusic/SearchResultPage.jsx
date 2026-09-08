@@ -37,6 +37,8 @@ export function SearchResultPage() {
   const showFilterBar = Boolean(data) && !isNoMatch;
   const composers = data?.composers ?? [];
   const moreComposers = (data?.composerMatchCount ?? 0) - composers.length;
+  // 기획 §11-4 — 필터로 0건이 된 화면에서 작곡가 카드는 결과가 아니라 출구다. 그 뜻을 한 줄로 잇는다
+  const exitComposer = composers.find((composer) => composer.workCount > 0) ?? null;
 
   return (
     <div className="search-result">
@@ -59,7 +61,8 @@ export function SearchResultPage() {
                     <span className="composer-match-name">
                       {`작곡가: ${composer.nameKo || composer.nameOriginal}${composer.nameKo ? ` (${composer.nameOriginal})` : ""}`}
                     </span>
-                    <span className="composer-match-count">{`곡 ${composer.workCount}개`}</span>
+                    {/* 기획 §11-4 — 이 숫자는 필터·페이지와 무관한 "작곡가 페이지에 가면 있는 곡 수"다 */}
+                    <span className="composer-match-count">{`등록된 곡 ${composer.workCount}개 모두 보기`}</span>
                   </span>
                   <span className="material-icons" aria-hidden="true">
                     chevron_right
@@ -131,7 +134,13 @@ export function SearchResultPage() {
                   ) : null}
                 </div>
               ) : isEmptyResult ? (
-                <EmptyState icon="filter_alt_off" title="이 조건에 맞는 곡이 없어요" />
+                <EmptyState icon="filter_alt_off" title="이 조건에 맞는 곡이 없어요">
+                  {exitComposer ? (
+                    <Link className="btn btn-text" to={`/composers/${exitComposer.id}`}>
+                      {`${exitComposer.nameKo || exitComposer.nameOriginal}의 곡은 ${exitComposer.workCount}개 등록돼 있어요 — 조건 없이 모두 보기`}
+                    </Link>
+                  ) : null}
+                </EmptyState>
               ) : (
                 <>
                   <div className="post-list">

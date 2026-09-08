@@ -70,7 +70,8 @@ describe("HomePage — 인기곡", () => {
     renderWithProviders(<HomePage />);
     await findText("인기곡 10");
     expect(findCall("/api/works/popular").params.get("limit")).toBe("10");
-    expect(screen.getByRole("heading", { name: "인기곡" })).toBeInTheDocument();
+    // 기획 §11-3: 이 자리는 순위표가 아니라 견본 진열대다 — 제목이 그 약속을 말한다
+    expect(screen.getByRole("heading", { name: "지금 바로 받을 수 있는 인기곡" })).toBeInTheDocument();
     const links = screen.getAllByRole("link").filter((a) => /^\/works\/\d+$/.test(a.getAttribute("href")));
     expect(links).toHaveLength(10);
     expect(links[0]).toHaveAttribute("href", "/works/100");
@@ -78,11 +79,14 @@ describe("HomePage — 인기곡", () => {
     expect(links[0]).toHaveTextContent("인기곡 1");
   });
 
-  it("인기곡 0개 → '아직 등록된 곡이 없어요' (제목은 유지)", async () => {
+  it("인기곡 0개 → 영역 자체를 표시하지 않는다 (빈 채로 자리를 남기지 않는다, 기획 §11-3-6)", async () => {
     mockHome({ popular: [] });
     renderWithProviders(<HomePage />);
-    await findText("아직 등록된 곡이 없어요");
-    expect(screen.getByRole("heading", { name: "인기곡" })).toBeInTheDocument();
+    // 작곡가 영역이 그려질 때까지 기다린 뒤 인기곡 자리가 아예 없음을 확인한다
+    await findText("쇼팽");
+    expect(screen.queryByRole("heading", { name: /인기곡/ })).not.toBeInTheDocument();
+    expectNoText("아직 등록된 곡이 없어요");
+    expect(screen.getByPlaceholderText(PLACEHOLDER)).toBeInTheDocument();
   });
 
   it("인기곡 실패 → 인기곡 영역에만 '연결을 확인해 주세요' + '다시 시도', 작곡가는 정상", async () => {

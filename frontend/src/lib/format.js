@@ -190,3 +190,44 @@ export function formatClockTime(value, { seconds = false } = {}) {
 export function formatCount(value) {
   return Number(value ?? 0).toLocaleString("en-US");
 }
+
+/* ---------------------------------------------------------------------
+   받게 되는 악보의 범위 한 줄 (02 §2-2-1 scopeNote, 기획 §2 F2-5 · §11-2)
+   별칭 일치 줄과 같은 자리·같은 한 줄이라 여기서 함께 만든다.
+   --------------------------------------------------------------------- */
+
+/** MOVEMENT_ONLY 문구. 수집이 악장 번호를 못 읽었으면 폴백(발췌) */
+function movementOnlyText(movementNumber) {
+  return movementNumber ? `${movementNumber}악장만 들어 있어요` : "일부 악장만 들어 있어요";
+}
+
+/**
+ * 곡 카드의 "별칭 · 범위" 한 줄. 만들 말이 없으면 빈 문자열.
+ * 묶음(COLLECTION)은 별칭과 묶여 "'X'가 들어 있는 악보" 로 '…으로 찾음' 을 대체한다.
+ */
+export function formatWorkScopeLine({ matchedAlias = null, scopeNote = null } = {}) {
+  const codes = scopeNote?.codes ?? [];
+  const isCollection = codes.includes("COLLECTION");
+  const parts = [];
+
+  if (matchedAlias) {
+    parts.push(isCollection ? `'${matchedAlias}'가 들어 있는 악보` : `'${matchedAlias}'으로 찾음`);
+  }
+  if (codes.includes("ARRANGEMENT")) parts.push("피아노 편곡 악보예요");
+  if (codes.includes("MOVEMENT_ONLY")) parts.push(movementOnlyText(scopeNote?.movementNumber));
+
+  return parts.join(" · ");
+}
+
+/** 추천 지정 경고(02 §5-6) — 판본의 악장 번호는 화면이 이미 가진 데이터에서 쓴다 */
+export function formatRecommendWarning(code, edition) {
+  if (code === "NOT_DOWNLOADABLE") {
+    return "이 판본은 사용자에게 다운로드가 열리지 않아요 — 저작권 판정을 '자유 이용 가능'으로 바꿔야 해요";
+  }
+  if (code === "ARRANGEMENT") return "이 판본은 편곡이에요. 사용자가 원곡 악보를 기대하고 받을 수 있어요";
+  if (code === "PARTIAL_SCOPE") {
+    const scope = edition?.movementNumber ? `${edition.movementNumber}악장만` : "일부만";
+    return `이 판본은 ${scope} 들어 있어요. 곡 전체가 아니에요`;
+  }
+  return "";
+}

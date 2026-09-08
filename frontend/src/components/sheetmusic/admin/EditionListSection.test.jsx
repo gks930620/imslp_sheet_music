@@ -123,7 +123,7 @@ describe("EditionListSection — 추천 지정", () => {
         {
           url: RECOMMEND,
           method: "PUT",
-          data: { workId: 21, previousEditionId: 301, editionId: 302, workStatus: "READY", warning: null },
+          data: { workId: 21, previousEditionId: 301, editionId: 302, workStatus: "READY", warnings: [] },
         },
       ],
     });
@@ -142,7 +142,7 @@ describe("EditionListSection — 추천 지정", () => {
         {
           url: RECOMMEND,
           method: "PUT",
-          data: { workId: 21, previousEditionId: null, editionId: 302, workStatus: "PREPARING", warning: null },
+          data: { workId: 21, previousEditionId: null, editionId: 302, workStatus: "PREPARING", warnings: [] },
         },
       ],
     });
@@ -158,12 +158,54 @@ describe("EditionListSection — 추천 지정", () => {
         {
           url: RECOMMEND,
           method: "PUT",
-          data: { workId: 21, previousEditionId: null, editionId: 302, workStatus: "UNKNOWN", warning: "NOT_DOWNLOADABLE" },
+          data: {
+            workId: 21,
+            previousEditionId: null,
+            editionId: 302,
+            workStatus: "UNKNOWN",
+            warnings: ["NOT_DOWNLOADABLE"],
+          },
         },
       ],
     });
     await user.click(within(row(302)).getByRole("button", { name: "추천으로 지정" }));
     await findText("이 판본은 사용자에게 다운로드가 열리지 않아요 — 저작권 판정을 '자유 이용 가능'으로 바꿔야 해요");
+  });
+
+  // 02 §5-6 (기획 §11-2 ①): 경고는 목록이다 — 겹치면 전부 보인다. 하나만 보이면 관리자는 나머지를 모른 채 지정한다.
+  it("경고가 겹치면 세 줄이 모두 보인다 (확인 중 · 편곡 · N악장만)", async () => {
+    const user = userEvent.setup();
+    const arrangedMovement = adminEdition({
+      id: 302,
+      isRecommended: false,
+      kind: "ARRANGEMENT",
+      scope: "MOVEMENT",
+      movementNumber: 2,
+      koreaCopyright: "UNKNOWN",
+      downloadable: false,
+      downloadUrl: null,
+    });
+    renderSection({
+      editions: [arrangedMovement],
+      recommendedEditionId: null,
+      routes: [
+        {
+          url: RECOMMEND,
+          method: "PUT",
+          data: {
+            workId: 21,
+            previousEditionId: null,
+            editionId: 302,
+            workStatus: "UNKNOWN",
+            warnings: ["NOT_DOWNLOADABLE", "ARRANGEMENT", "PARTIAL_SCOPE"],
+          },
+        },
+      ],
+    });
+    await user.click(within(row(302)).getByRole("button", { name: "추천으로 지정" }));
+    await findText("이 판본은 사용자에게 다운로드가 열리지 않아요");
+    expectText("이 판본은 편곡이에요");
+    expectText("이 판본은 2악장만 들어 있어요");
   });
 
   it("파일이 없는 행의 추천 지정 버튼은 비활성 + 이유를 적는다", () => {

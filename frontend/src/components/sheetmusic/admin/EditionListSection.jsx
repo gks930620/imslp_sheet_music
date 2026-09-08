@@ -6,11 +6,19 @@ import { InlineAlert } from "../../common/InlineAlert.jsx";
 import { CopyrightBadge } from "../CopyrightBadge.jsx";
 import { EditionFormModal } from "./EditionFormModal.jsx";
 import { callApi } from "../../../lib/http.js";
-import { formatCount, formatEditionKind, formatEditionScope, formatFileSizeCompact } from "../../../lib/format.js";
+import {
+  formatCount,
+  formatEditionKind,
+  formatEditionScope,
+  formatFileSizeCompact,
+  formatRecommendWarning,
+} from "../../../lib/format.js";
 
 const POLL_INTERVAL_MS = 3_000;
 const FETCHING_STATUSES = ["QUEUED", "FETCHING"];
 const ACTION_ERROR = "처리하지 못했어요. 잠시 후 다시 시도해 주세요";
+/** 02 §5-6 — 경고는 목록이다. 겹치면 전부 보여준다(고정 순서) */
+const WARNING_ORDER = ["NOT_DOWNLOADABLE", "ARRANGEMENT", "PARTIAL_SCOPE"];
 
 function editionLabel(edition) {
   return [formatEditionKind(edition?.kind), edition?.publisher].filter(Boolean).join(" · ");
@@ -123,7 +131,8 @@ export function EditionListSection({
           ? `추천 판본을 ${editionLabel(previous)}에서 ${editionLabel(edition)}로 바꿨어요`
           : "추천 판본으로 지정했어요",
       );
-      if (data.warning === "NOT_DOWNLOADABLE") setRowAlert(edition.id, { kind: "not-downloadable" });
+      const codes = WARNING_ORDER.filter((code) => (data.warnings ?? []).includes(code));
+      if (codes.length > 0) setRowAlert(edition.id, { kind: "warnings", codes });
       onChanged?.();
     } catch {
       setRowAlert(edition.id, { kind: "action-failed" });
@@ -316,12 +325,13 @@ export function EditionListSection({
                   </p>
                 ) : null}
 
-                {alert?.kind === "not-downloadable" ? (
-                  <InlineAlert variant="warning">
-                    이 판본은 사용자에게 다운로드가 열리지 않아요 — 저작권 판정을 &apos;자유 이용 가능&apos;으로 바꿔야
-                    해요
-                  </InlineAlert>
-                ) : null}
+                {alert?.kind === "warnings"
+                  ? alert.codes.map((code) => (
+                      <InlineAlert key={code} variant="warning">
+                        {formatRecommendWarning(code, edition)}
+                      </InlineAlert>
+                    ))
+                  : null}
                 {alert?.kind === "action-failed" ? <InlineAlert variant="danger">{ACTION_ERROR}</InlineAlert> : null}
                 {alert?.kind === "fetch-error" ? <InlineAlert variant="danger">{alert.message}</InlineAlert> : null}
                 {alert?.kind === "fetch-failed" ? (

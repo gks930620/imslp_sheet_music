@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { LevelChip } from "./LevelChip.jsx";
 import { StatusBadge } from "./StatusBadge.jsx";
+import { formatWorkScopeLine } from "../../lib/format.js";
 
 function composerText(composer) {
   if (!composer) return "";
@@ -31,6 +32,11 @@ export function WorkCard({ work, variant = "full", rank, hideComposer = false, h
   }
 
   const meta = [hideComposer ? "" : composerText(work.composer), catalog].filter(Boolean).join(" · ");
+  // 00_공통 §3-2 · 02 §2-2-1 — 별칭 일치 줄과 "받게 되는 악보의 범위" 는 같은 자리·같은 한 줄이다
+  const scopeLine = formatWorkScopeLine({
+    matchedAlias: hideAlias ? null : work.matchedAlias,
+    scopeNote: work.scopeNote,
+  });
 
   return (
     <Link className="work-card" to={`/works/${work.id}`}>
@@ -52,7 +58,7 @@ export function WorkCard({ work, variant = "full", rank, hideComposer = false, h
           <LevelChip level={work.level} />
           {work.pageCount ? <span className="work-card-pages">{work.pageCount}쪽</span> : null}
         </span>
-        {work.matchedAlias && !hideAlias ? <span className="work-card-alias">{`'${work.matchedAlias}'으로 찾음`}</span> : null}
+        {scopeLine ? <span className="work-card-alias">{scopeLine}</span> : null}
       </span>
     </Link>
   );

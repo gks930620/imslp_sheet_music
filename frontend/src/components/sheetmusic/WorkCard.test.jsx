@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { WorkCard } from "./WorkCard.jsx";
 import { renderWithProviders } from "../../test/renderWithProviders.jsx";
-import { workSummary, workMoonlight } from "../../test/fixtures.js";
+import { workSummary, workMoonlight, scopeNote } from "../../test/fixtures.js";
 import { expectNoText, expectText } from "../../test/text.js";
 
 // 00_공통_레이아웃_토큰.md §3-2 곡 카드, §3-3 난이도 칩, §3-4 상태 뱃지
@@ -96,6 +96,40 @@ describe("WorkCard (full)", () => {
   it("미리보기가 있으면 이미지를 보여준다", () => {
     renderWithProviders(<WorkCard work={workMoonlight} />);
     expect(screen.getByRole("img")).toHaveAttribute("src", "/uploads/3f2a-c1.png");
+  });
+});
+
+describe("WorkCard — 받게 되는 악보의 범위 한 줄 (02 §2-2-1 scopeNote, 기획 §2 F2-5 · §11-2)", () => {
+  // 묶음("받는 게 찾은 것보다 크다")과 편곡·악장("작거나 다르다")은 같은 자리·같은 한 줄이다.
+  it("추천 판본이 편곡이면 '피아노 편곡 악보예요'", () => {
+    renderWithProviders(<WorkCard work={workSummary({ scopeNote: scopeNote(["ARRANGEMENT"]) })} />);
+    expectText("피아노 편곡 악보예요");
+  });
+
+  it("추천 판본이 2악장만이면 '2악장만 들어 있어요'", () => {
+    renderWithProviders(<WorkCard work={workSummary({ scopeNote: scopeNote(["MOVEMENT_ONLY"], 2) })} />);
+    expectText("2악장만 들어 있어요");
+  });
+
+  it("편곡이면서 2악장만이면 한 줄에 이어 쓴다", () => {
+    renderWithProviders(
+      <WorkCard work={workSummary({ scopeNote: scopeNote(["ARRANGEMENT", "MOVEMENT_ONLY"], 2) })} />,
+    );
+    expectText("피아노 편곡 악보예요 · 2악장만 들어 있어요");
+  });
+
+  it("묶음 악보를 별칭으로 찾았으면 \"'강아지 왈츠'가 들어 있는 악보\" (…으로 찾음 이 아니다)", () => {
+    renderWithProviders(
+      <WorkCard work={workSummary({ matchedAlias: "강아지 왈츠", scopeNote: scopeNote(["COLLECTION"]) })} />,
+    );
+    expectText("'강아지 왈츠'가 들어 있는 악보");
+    expectNoText("으로 찾음");
+  });
+
+  it("scopeNote 가 null 이면 그 줄이 없다 (대부분의 곡)", () => {
+    renderWithProviders(<WorkCard work={workSummary({ scopeNote: null })} />);
+    expectNoText("편곡 악보예요");
+    expectNoText("들어 있어요");
   });
 });
 

@@ -18,6 +18,10 @@ export function HomePage() {
     deps: [],
   });
 
+  // 기획 §11-3-6 — 인기곡은 순위표가 아니라 견본 진열대다. 보여줄 곡이 없으면 자리를 남기지 않는다
+  // (불러오는 중·실패는 자리를 지킨다 — 비어 있는 것과 못 불러온 것은 다른 사실이다)
+  const showPopular = Boolean(popular.loading || popular.error || popular.data?.length);
+
   return (
     <div className="home">
       <section className="home-intro">
@@ -42,29 +46,26 @@ export function HomePage() {
       </section>
 
       <div className="home-sections">
-        <section className="home-popular">
-          <h2 className="section-title">인기곡</h2>
-          {popular.error ? (
-            <ErrorState compact onRetry={popular.reload} />
-          ) : popular.loading ? (
-            <div className="skeleton-list" aria-hidden="true">
-              {[0, 1, 2, 3, 4].map((index) => (
-                <div key={index} className="skeleton-row" />
-              ))}
-            </div>
-          ) : popular.data?.length ? (
-            <div className="post-list">
-              {popular.data.map((work, index) => (
-                <WorkCard key={work.id} work={work} variant="compact" rank={index + 1} />
-              ))}
-            </div>
-          ) : (
-            <div className="home-empty">
-              <span className="material-icons">library_music</span>
-              <p>아직 등록된 곡이 없어요</p>
-            </div>
-          )}
-        </section>
+        {showPopular ? (
+          <section className="home-popular">
+            <h2 className="section-title">지금 바로 받을 수 있는 인기곡</h2>
+            {popular.error ? (
+              <ErrorState compact onRetry={popular.reload} />
+            ) : popular.loading ? (
+              <div className="skeleton-list" aria-hidden="true">
+                {[0, 1, 2, 3, 4].map((index) => (
+                  <div key={index} className="skeleton-row" />
+                ))}
+              </div>
+            ) : (
+              <div className="post-list">
+                {popular.data.map((work, index) => (
+                  <WorkCard key={work.id} work={work} variant="compact" rank={index + 1} />
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
 
         <section className="home-composers">
           <div className="section-title-row">
