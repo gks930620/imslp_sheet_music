@@ -14,10 +14,12 @@ import com.test.test.sheetmusic.composer.QComposerAliasEntity;
 import com.test.test.sheetmusic.composer.QComposerEntity;
 import com.test.test.sheetmusic.edition.KoreaCopyright;
 import com.test.test.sheetmusic.edition.QEditionEntity;
+import com.test.test.sheetmusic.work.Level;
 import com.test.test.sheetmusic.work.QWorkAliasEntity;
 import com.test.test.sheetmusic.work.QWorkCatalogNumberEntity;
 import com.test.test.sheetmusic.work.QWorkEntity;
 import com.test.test.sheetmusic.work.WorkEntity;
+import com.test.test.sheetmusic.work.WorkNeedsWork;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -73,6 +75,60 @@ public class WorkRepositoryImpl implements WorkRepositoryCustom {
                 .where(where(condition))
                 .fetchOne();
         return total == null ? 0L : total;
+    }
+
+    /**
+     * 02 §3-2 — 자격 곡(READY + 한국어 제목)을 먼저 채우고, 모자란 칸만 준비 중 곡으로 채운다.
+     * <b>자격 곡이 0개면 폴백하지 않는다</b>(화면이 영역 자체를 감춘다). RESTRICTED·UNKNOWN 은 폴백에도 쓰지 않는다.
+     */
+    @Override
+    public List<WorkEntity> findPopular(int limit) {
+        List<WorkEntity> eligible = popularQuery(readyPredicate(), limit);
+        if (eligible.isEmpty() || eligible.size() >= limit) {
+            return eligible;
+        }
+        List<WorkEntity> result = new ArrayList<>(eligible);
+        result.addAll(popularQuery(preparingPredicate(), limit - eligible.size()));
+        return result;
+    }
+
+    @Override
+    public long countNeedsWork() {
+        Long total = queryFactory.select(WORK.count())
+                .from(WORK)
+                .leftJoin(WORK.recommendedEdition, RECOMMENDED)
+                .where(WorkNeedsWork.predicate(WORK, RECOMMENDED))
+                .fetchOne();
+        return total == null ? 0L : total;
+    }
+
+    /** 자격·폴백이 같은 정렬을 쓴다 — 다른 것은 상태 조건 하나뿐이다(02 §3-2 3번). */
+    private List<WorkEntity> popularQuery(BooleanExpression statusPredicate, int limit) {
+        return queryFactory.selectFrom(WORK)
+                .join(WORK.composer, COMPOSER).fetchJoin()
+                .leftJoin(WORK.recommendedEdition, RECOMMENDED).fetchJoin()
+                .where(WORK.hidden.isFalse(), hasKoreanTitle(), statusPredicate)
+                .orderBy(WORK.downloadCount.desc(), levelOrder().asc(), WORK.titleKo.asc(), WORK.id.asc())
+                .limit(limit)
+                .fetch();
+    }
+
+    private BooleanExpression hasKoreanTitle() {
+        return WORK.titleKo.isNotNull().and(WORK.titleKo.trim().ne(""));
+    }
+
+    /**
+     * 난이도 오름차순은 <b>enum 선언 순서(ordinal)가 아니라 명시적 순서</b>다 — 값은 문자열로 저장되므로
+     * DB 정렬은 알파벳순(ADVANCED 가 1등)이 되고, enum 에 값을 하나 끼워 넣으면 ordinal 정렬도 조용히 바뀐다.
+     * NULL(미정)은 맨 뒤다.
+     */
+    private NumberExpression<Integer> levelOrder() {
+        return new CaseBuilder()
+                .when(WORK.level.eq(Level.BEGINNER)).then(0)
+                .when(WORK.level.eq(Level.ELEMENTARY)).then(1)
+                .when(WORK.level.eq(Level.INTERMEDIATE)).then(2)
+                .when(WORK.level.eq(Level.ADVANCED)).then(3)
+                .otherwise(4);
     }
 
     // ===== where =====
@@ -159,20 +215,9 @@ public class WorkRepositoryImpl implements WorkRepositoryCustom {
             case "UNKNOWN" -> RECOMMENDED.pdfFileId.isNotNull()
                     .and(RECOMMENDED.koreaCopyright.eq(KoreaCopyright.UNKNOWN));
             case "HIDDEN" -> WORK.hidden.isTrue();
-            case "NEEDS_WORK" -> needsWorkPredicate();
+            case "NEEDS_WORK" -> WorkNeedsWork.predicate(WORK, RECOMMENDED);
             default -> throw new BusinessRuleException("상태 값이 올바르지 않아요: " + statusFilter);
         };
-    }
-
-    /** 01_ERD §4 보완 필요: 한국어 제목·별칭·난이도·추천 판본 중 하나라도 비었을 때. */
-    private BooleanExpression needsWorkPredicate() {
-        BooleanExpression noAlias = JPAExpressions.selectOne().from(SUB_ALIAS)
-                .where(SUB_ALIAS.work.eq(WORK))
-                .notExists();
-        return WORK.titleKo.isNull()
-                .or(WORK.level.isNull())
-                .or(WORK.recommendedEdition.isNull())
-                .or(noAlias);
     }
 
     // ===== order by =====

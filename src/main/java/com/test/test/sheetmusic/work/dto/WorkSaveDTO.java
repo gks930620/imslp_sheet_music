@@ -52,6 +52,13 @@ public class WorkSaveDTO {
     @Size(max = 500, message = "500자를 넘을 수 없어요")
     private String movementPageGuide;
 
+    /**
+     * 수록곡 안내 (02 §4-8, 2026-09-08 추가). 시드가 채우는 값이지만 수집으로 들어온 곡·오타 수정을 위해
+     * 관리자도 편집할 수 있다. 공백·누락은 허용(null 로 저장).
+     */
+    @Size(max = 500, message = "500자를 넘을 수 없어요")
+    private String collectionGuide;
+
     @Size(max = 500, message = "500자를 넘을 수 없어요")
     private String imslpUrl;
 

@@ -17,6 +17,7 @@ import com.test.test.sheetmusic.edition.EditionEntity;
 import com.test.test.sheetmusic.edition.dto.AdminEditionDTO;
 import com.test.test.sheetmusic.edition.repository.DownloadLogRepository;
 import com.test.test.sheetmusic.edition.repository.EditionRepository;
+import com.test.test.sheetmusic.edition.repository.WorkEditionCount;
 import com.test.test.sheetmusic.work.dto.AdminWorkDetailDTO;
 import com.test.test.sheetmusic.work.dto.AdminWorkListDTO;
 import com.test.test.sheetmusic.work.dto.AdminWorkSummaryDTO;
@@ -78,11 +79,10 @@ public class AdminWorkService {
                 : page.getTotalElements();
 
         List<Long> ids = page.getContent().stream().map(WorkEntity::getId).toList();
-        Map<Long, List<EditionEntity>> editionsByWork = groupEditions(ids);
+        Map<Long, Long> editionCounts = countEditions(ids);
 
         List<AdminWorkSummaryDTO> content = new ArrayList<>();
         for (WorkEntity work : page.getContent()) {
-            List<EditionEntity> editions = editionsByWork.getOrDefault(work.getId(), List.of());
             content.add(AdminWorkSummaryDTO.builder()
                     .id(work.getId())
                     .titleKo(work.getTitleKo())
@@ -91,7 +91,7 @@ public class AdminWorkService {
                     .catalogNumbers(work.getCatalogNumbers().stream()
                             .map(WorkCatalogNumberEntity::getCatalogValue).toList())
                     .level(work.getLevel())
-                    .editionCount(editions.size())
+                    .editionCount(editionCounts.getOrDefault(work.getId(), 0L).intValue())
                     .hasRecommended(work.getRecommendedEdition() != null)
                     .status(work.status())
                     .needsWork(work.needsWork())
@@ -139,6 +139,7 @@ public class AdminWorkService {
                 .musicalKey(request.getMusicalKey())
                 .movements(request.getMovements())
                 .movementPageGuide(request.getMovementPageGuide())
+                .collectionGuide(request.getCollectionGuide())
                 .imslpUrl(canonicalUrl)
                 .hidden(request.isHidden())
                 .build();
@@ -159,7 +160,7 @@ public class AdminWorkService {
 
         work.update(composer, request.getTitleKo(), request.getTitleOriginal(), Level.parse(request.getLevel()),
                 request.getCompositionYear(), request.getMusicalKey(), request.getMovements(),
-                request.getMovementPageGuide(), canonicalUrl, request.isHidden());
+                request.getMovementPageGuide(), request.getCollectionGuide(), canonicalUrl, request.isHidden());
         work.replaceAliases(request.getAliases(), AliasSource.ADMIN);
         work.replaceCatalogNumbers(request.getCatalogNumbers());
         return toDetail(work);
@@ -196,15 +197,19 @@ public class AdminWorkService {
         return workRepository.findById(id).orElseThrow(() -> EntityNotFoundException.of("곡", id));
     }
 
-    private Map<Long, List<EditionEntity>> groupEditions(List<Long> workIds) {
-        Map<Long, List<EditionEntity>> map = new LinkedHashMap<>();
+    /**
+     * 목록에 필요한 것은 판본 <b>수</b> 하나뿐이라 집계 쿼리로 받는다 (03 §16-1).
+     * 판본 행을 전부 읽으면 20곡 × 70판본 = 1,400행을 숫자 하나 때문에 로드하게 된다.
+     */
+    private Map<Long, Long> countEditions(List<Long> workIds) {
+        Map<Long, Long> counts = new LinkedHashMap<>();
         if (workIds.isEmpty()) {
-            return map;
+            return counts;
         }
-        for (EditionEntity edition : editionRepository.findByWorkIds(workIds)) {
-            map.computeIfAbsent(edition.getWork().getId(), key -> new ArrayList<>()).add(edition);
+        for (WorkEditionCount row : editionRepository.countByWorkIds(workIds)) {
+            counts.put(row.getWorkId(), row.getEditionCount());
         }
-        return map;
+        return counts;
     }
 
     private AdminWorkDetailDTO toDetail(WorkEntity work) {
@@ -231,6 +236,7 @@ public class AdminWorkService {
                 .musicalKey(work.getMusicalKey())
                 .movements(work.getMovements())
                 .movementPageGuide(work.getMovementPageGuide())
+                .collectionGuide(work.getCollectionGuide())
                 .imslpUrl(work.getImslpUrl())
                 .hidden(work.isHidden())
                 .hiddenReason(work.getHiddenReason())

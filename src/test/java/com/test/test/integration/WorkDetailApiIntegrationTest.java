@@ -141,7 +141,7 @@ class WorkDetailApiIntegrationTest extends SheetMusicFixtureSupport {
     }
 
     @Test
-    @DisplayName("otherEditions: 추천 제외, id 오름차순, downloadableOtherCount 는 파일+FREE 인 것만")
+    @DisplayName("otherEditions: 추천 제외, 파일 있는 구간이 앞·구간 안 id 오름차순, downloadableOtherCount 는 파일+FREE 인 것만")
     void otherEditions_orderAndCount() throws Exception {
         Tokens admin = loginAdmin();
         long composerId = createComposer(admin, "판본테스트", "Editions, Zz");
@@ -157,8 +157,9 @@ class WorkDetailApiIntegrationTest extends SheetMusicFixtureSupport {
 
         List<Long> otherIds = new ArrayList<>();
         data.path("otherEditions").forEach(e -> otherIds.add(e.path("id").asLong()));
-        // 관리자 직접 등록 판본은 imslp_download_count 가 전부 null → id ASC
-        assertThat(otherIds).containsExactly(e2, e3, e4, e5);
+        // 02 §3-3: 파일 있는 구간이 앞, 파일 없는 구간이 뒤. 구간 안 정렬은
+        // imslp_download_count DESC NULLS LAST → id ASC (관리자 직접 등록이라 전부 null → id ASC)
+        assertThat(otherIds).containsExactly(e2, e3, e5, e4);
         assertThat(data.path("downloadableOtherCount").asInt()).isEqualTo(2);
 
         for (JsonNode e : data.path("otherEditions")) {

@@ -31,6 +31,11 @@ public class AdminWorkDetailDTO {
     private String musicalKey;
     private String movements;
     private String movementPageGuide;
+    /**
+     * 수록곡 안내 (02 §4-7, 2026-09-08 계약 보완). §4-8 요청 DTO 에 있는 필드는 같은 리소스의 상세 응답에도 있어야 한다 —
+     * PUT 이 전체 교체라 관리 화면이 이 응답으로 폼을 채워 되돌려 보내기 때문이다(없으면 저장 한 번에 값이 지워진다).
+     */
+    private String collectionGuide;
     private String imslpUrl;
     private boolean hidden;
     private HiddenReason hiddenReason;

@@ -6,6 +6,7 @@ import com.test.test.sheetmusic.composer.repository.ComposerRepository;
 import com.test.test.sheetmusic.edition.EditionDtoAssembler;
 import com.test.test.sheetmusic.edition.EditionEntity;
 import com.test.test.sheetmusic.work.dto.ComposerRefDTO;
+import com.test.test.sheetmusic.work.dto.ScopeNoteDTO;
 import com.test.test.sheetmusic.work.dto.WorkSummaryDTO;
 import com.test.test.sheetmusic.work.repository.WorkAliasRepository;
 import com.test.test.sheetmusic.work.repository.WorkCatalogNumberRepository;
@@ -76,6 +77,8 @@ public class WorkDtoAssembler {
                     .matchedAlias(matchedAlias(work, aliases.getOrDefault(work.getId(), List.of()),
                             workCatalogs, composerAliases.getOrDefault(work.getComposer().getId(), List.of()),
                             terms, wholeTerm))
+                    // 02 §2-2-1 — 검색·인기곡·작곡가의 곡·같은 작곡가 곡이 이 한 자리에서 같은 값을 받는다.
+                    .scopeNote(ScopeNoteDTO.from(work))
                     .build());
         }
         return result;

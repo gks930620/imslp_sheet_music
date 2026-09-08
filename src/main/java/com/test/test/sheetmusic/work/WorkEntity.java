@@ -31,6 +31,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /** 곡 (01_ERD §3-3). */
 @Entity
@@ -69,6 +71,7 @@ public class WorkEntity {
     private String titleOriginalNormalized;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "level", length = 30)
     private Level level;
 
@@ -84,6 +87,13 @@ public class WorkEntity {
     @Column(name = "movement_page_guide", length = 500)
     private String movementPageGuide;
 
+    /**
+     * 수록곡 안내 (01_ERD §3-3, 2026-09-08 추가) — "이 악보에는 왈츠 3곡이 들어 있어요 …" 처럼 사람이 쓴 완성 문장.
+     * 값이 있으면 그 곡은 <b>묶음 악보</b>이고, 검색 항목의 scopeNote 가 COLLECTION 을 다는 근거다(02 §2-2-1).
+     */
+    @Column(name = "collection_guide", length = 500)
+    private String collectionGuide;
+
     @Column(name = "imslp_url", length = 500)
     private String imslpUrl;
 
@@ -91,6 +101,7 @@ public class WorkEntity {
     private boolean hidden;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "hidden_reason", length = 30)
     private HiddenReason hiddenReason;
 
@@ -118,7 +129,7 @@ public class WorkEntity {
     @Builder
     private WorkEntity(ComposerEntity composer, String titleKo, String titleOriginal, Level level,
                        String compositionYear, String musicalKey, String movements, String movementPageGuide,
-                       String imslpUrl, boolean hidden, HiddenReason hiddenReason) {
+                       String collectionGuide, String imslpUrl, boolean hidden, HiddenReason hiddenReason) {
         this.composer = composer;
         changeTitles(titleKo, titleOriginal);
         this.level = level;
@@ -126,6 +137,7 @@ public class WorkEntity {
         this.musicalKey = musicalKey;
         this.movements = movements;
         this.movementPageGuide = movementPageGuide;
+        this.collectionGuide = blankToNull(collectionGuide);
         this.imslpUrl = imslpUrl;
         this.hidden = hidden;
         this.hiddenReason = hiddenReason;
@@ -153,7 +165,7 @@ public class WorkEntity {
 
     public void update(ComposerEntity composer, String titleKo, String titleOriginal, Level level,
                        String compositionYear, String musicalKey, String movements, String movementPageGuide,
-                       String imslpUrl, boolean hidden) {
+                       String collectionGuide, String imslpUrl, boolean hidden) {
         this.composer = composer;
         changeTitles(titleKo, titleOriginal);
         this.level = level;
@@ -161,6 +173,7 @@ public class WorkEntity {
         this.musicalKey = musicalKey;
         this.movements = movements;
         this.movementPageGuide = movementPageGuide;
+        this.collectionGuide = blankToNull(collectionGuide);
         this.imslpUrl = imslpUrl;
         changeHidden(hidden, null);
     }
@@ -169,6 +182,20 @@ public class WorkEntity {
     public void changeHidden(boolean hidden, HiddenReason reason) {
         this.hidden = hidden;
         this.hiddenReason = hidden ? reason : null;
+    }
+
+    /**
+     * 재수집이 숨김을 다시 계산한다 — <b>수집이 숨긴 것만 수집이 푼다</b> (02 §6-11 표).
+     *
+     * <p>판정 규칙이 개정돼도 이미 저장된 {@code hidden} 은 그대로라, 재수집이 한 방향으로만 이것을 정리한다.
+     * 관리자가 직접 숨긴 곡({@code hiddenReason == null})과 이미 보이는 곡은 건드리지 않는다 —
+     * 수집이 관리자 판단을 뒤집으면 손댈수록 되돌아가는 화면이 된다.
+     */
+    public void reopenIfCrawlerHid(boolean keyboardSolo) {
+        if (keyboardSolo && this.hidden && this.hiddenReason == HiddenReason.NOT_PIANO_SOLO) {
+            this.hidden = false;
+            this.hiddenReason = null;
+        }
     }
 
     /** 값이 비어 있을 때만 채운다 — 수집이 관리자 입력을 덮어쓰지 않게 (02 §6-10). */
@@ -187,6 +214,16 @@ public class WorkEntity {
     public void fillImslpUrlIfBlank(String url) {
         if (isBlank(this.imslpUrl)) {
             this.imslpUrl = url;
+        }
+    }
+
+    /**
+     * 시드 1회 백필 (01_ERD §6, 2026-09-08) — <b>비어 있을 때만</b> 채운다.
+     * 이미 적재된 곡에 새 컬럼을 채우는 유일한 예외이며, 관리자가 쓴 문구는 덮지 않는다.
+     */
+    public void fillCollectionGuideIfBlank(String collectionGuide) {
+        if (isBlank(this.collectionGuide) && !isBlank(collectionGuide)) {
+            this.collectionGuide = collectionGuide.trim();
         }
     }
 
@@ -288,22 +325,9 @@ public class WorkEntity {
         };
     }
 
-    /** 보완 필요 항목 (01_ERD §4). */
+    /** 보완 필요 항목 (01_ERD §4) — 규칙 원본은 {@link WorkNeedsWork} 하나다(관리 홈·목록 필터와 공유). */
     public List<WorkMissing> missing() {
-        List<WorkMissing> missing = new ArrayList<>();
-        if (isBlank(this.titleKo)) {
-            missing.add(WorkMissing.TITLE_KO);
-        }
-        if (this.aliases.isEmpty()) {
-            missing.add(WorkMissing.ALIAS);
-        }
-        if (this.level == null) {
-            missing.add(WorkMissing.LEVEL);
-        }
-        if (this.recommendedEdition == null) {
-            missing.add(WorkMissing.RECOMMENDED_EDITION);
-        }
-        return missing;
+        return WorkNeedsWork.missing(this);
     }
 
     public boolean needsWork() {

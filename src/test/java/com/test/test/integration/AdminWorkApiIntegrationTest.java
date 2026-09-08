@@ -236,7 +236,8 @@ class AdminWorkApiIntegrationTest extends AdminApiTestSupport {
         assertListIds(admin, composerId, "RESTRICTED", List.of(restricted));
         assertListIds(admin, composerId, "UNKNOWN", List.of(unknown));
         assertListIds(admin, composerId, "HIDDEN", List.of(hidden));
-        assertListIds(admin, composerId, "NEEDS_WORK", List.of(preparing, hidden, noLevel));
+        // 추천 판본의 판정이 확인 중인 곡도 보완 필요다 (01_ERD §4, 기획 §11-1 — 2026-09-08 개정)
+        assertListIds(admin, composerId, "NEEDS_WORK", List.of(preparing, hidden, noLevel, unknown));
 
         // 필터 없음 = 숨김 포함 전부, updated_at DESC
         JsonNode all = data(adminQuery(admin, "/api/admin/works", "composerId", String.valueOf(composerId))

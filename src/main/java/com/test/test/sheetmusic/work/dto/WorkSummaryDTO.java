@@ -27,4 +27,10 @@ public class WorkSummaryDTO {
     private String previewUrl;
     /** 검색 응답에서만 값이 있다 (02 §3-1 6번). 그 외 항상 null. */
     private String matchedAlias;
+
+    /**
+     * "받게 되는 악보가 찾은 것과 어떻게 다른가" (02 §2-2-1). <b>이 DTO 를 쓰는 모든 응답</b>에서 같은 규칙으로 채운다
+     * — matchedAlias 처럼 한 응답에서만 채우는 값이 아니다. 할 말이 없으면 필드 자체가 null 이다.
+     */
+    private ScopeNoteDTO scopeNote;
 }
