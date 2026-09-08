@@ -23,35 +23,23 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * 공용 파일 API (커뮤니티·사용자 파일 전용) — 02_API_명세서 §0-4.
+ *
+ * <p><b>바이트를 인라인으로 내주는 경로는 여기 없다.</b> 저장 파일명으로 바이트를 얻는 공개 경로는
+ * {@code GET /uploads/{저장파일명}}({@link FileServingController}) 하나뿐이고, 판본 PDF 는 그마저도 404 다 —
+ * 판본 바이트의 유일한 공개 경로는 저작권 게이트를 태우는 {@code GET /api/editions/{id}/download}(§3-4).
+ * 보일러플레이트가 남긴 {@code GET /images/{filename}} 은 그 게이트를 거치지 않고 같은 바이트를 흘려
+ * (qa 4차 실측: 비로그인 판본 PDF 200개·502MB) <b>제거했다</b>. 문이 늘면 게이트를 빠뜨린 문도 늘어난다 —
+ * 인라인 서빙이 다시 필요해지면 새 경로를 만들지 말고 {@code /uploads} 를 쓴다.
+ */
 @RestController
 @RequiredArgsConstructor
 @Slf4j
 public class FileController {
     private final FileService fileService;
-    // 서빙/다운로드는 활성 저장전략(로컬 디스크 또는 버킷)에 위임한다(§5-3).
+    // 첨부 다운로드는 활성 저장전략(로컬 디스크 또는 버킷)에 위임한다(§5-3).
     private final FileStorageStrategy fileStorageStrategy;
-
-    /**
-     * 이미지 파일 서비스 (HTML img 태그에서 호출)
-     * - 활성 저장전략에서 바이트를 읽어 인라인 렌더용으로 서빙한다.
-     */
-    @GetMapping("/images/{filename:.+}")
-    public ResponseEntity<Resource> serveFile(@PathVariable String filename) {
-        Resource resource = fileStorageStrategy.loadAsResource(filename);
-        if (resource == null || !resource.exists() || !resource.isReadable()) {
-            return ResponseEntity.notFound().build();
-        }
-        String contentType = "image/jpeg"; // 기본값
-        String lower = filename.toLowerCase();
-        if (lower.endsWith(".png")) contentType = "image/png";
-        else if (lower.endsWith(".gif")) contentType = "image/gif";
-        else if (lower.endsWith(".webp")) contentType = "image/webp";
-        // svg는 인라인 렌더 시 XSS 위험이 있어 image/* 로 매핑하지 않고 기본값 유지
-
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(contentType))
-                .body(resource);
-    }
 
     /**
      * 파일 조회 API (통합)

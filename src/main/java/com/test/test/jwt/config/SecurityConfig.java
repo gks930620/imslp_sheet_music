@@ -79,7 +79,9 @@ public class SecurityConfig {
                 .requestMatchers(
                         // 정적 리소스 (Vite 번들은 /assets/**, 아이콘/파비콘 포함)
                         "/", "/index.html", "/assets/**",
-                        "/css/**", "/js/**", "/images/**",
+                        // /images/** 는 열지 않는다 — 그 경로의 서빙 엔드포인트를 제거했다(02 §0-4, qa 4차).
+                        //   바이트 프록시는 /uploads/** 하나이고 판본 PDF 는 거기서도 404 다.
+                        "/css/**", "/js/**",
                         "/favicon.ico", "/favicon.svg", "/icons.svg", "/uploads/**",
                         "/error", "/healthz",
                         "/h2-console/**",
