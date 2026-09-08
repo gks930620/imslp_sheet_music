@@ -113,6 +113,7 @@ normalize(s):
 | musical_key | VARCHAR(50) | Y | 조성 |
 | movements | VARCHAR(500) | Y | 악장 구성(자유 문장) |
 | movement_page_guide | VARCHAR(500) | Y | 악장 페이지 안내(관리자 입력) |
+| collection_guide | VARCHAR(500) | Y | **2026-09-08 추가.** 수록곡 안내(01 §0-3, §2 F3-2). 곡 번호 기준 완성 문장이며 시드(`works.csv`)로 들어온다 — 출처는 `03_1차_큐레이션_곡목록.md` §10. **값이 비어 있지 않으면 그 곡은 "묶음 악보"** 다(03 §10-1) — 검색 항목의 `scopeNote`(02 §2-2)와 곡 상세의 수록곡 안내가 이 값 하나로 갈린다. `movement_page_guide`(쪽수 기준·추천 판본이 바뀌면 틀려짐)와 **별개 필드**다 |
 | imslp_url | VARCHAR(500) | Y | **정규 형태 UNIQUE**(NULL 허용 — MySQL/H2 모두 NULL 중복 허용). 수집·시드 동일성 키. 정규 형태 = `https://imslp.org/wiki/` + 퍼센트 디코딩한 제목(공백→`_`) — `02_API_명세서.md` §6-1 |
 | hidden | BOOLEAN | N | 기본 false. 숨김이면 사용자 화면 어디에도 안 나옴 |
 | hidden_reason | VARCHAR(30) | Y | enum `HiddenReason`: `NOT_PIANO_SOLO`(수집 자동 숨김). 관리자가 직접 숨기면 NULL |
@@ -123,8 +124,15 @@ normalize(s):
 인덱스: `idx_work_composer(composer_id)`, `uk_work_imslp_url(imslp_url)`, `idx_work_title_ko_normalized`, `idx_work_title_original_normalized`, `idx_work_download_count`, `idx_work_updated_at`(관리 목록 정렬), `idx_work_hidden`.
 
 > `LIKE '%…%'` 는 B-tree 인덱스를 못 타지만 1차 규모(수백 곡)에서는 풀스캔이 밀리초다. 정규화 컬럼 인덱스는 정확·전방 일치(일치도 정렬)와 유니크용이다.
+>
+> **2026-09-07 재확인(senior-dev).** 실제 수집으로 드러난 규모는 **곡 수백 · 판본 수만**이다(곡 1개당 판본 70개, 20곡 1,792개 → 300곡이면 25,000개).
+> 이 비대칭이 중요하다: 검색·목록의 `LIKE` 풀스캔은 여전히 `work`(수백 행) 위에서만 돌고 `edition` 은 검색 경로에 없으므로 **문제가 아니다**.
+> 규모가 깨뜨리는 것은 **판본을 곡 단위로 통째로 읽는 자리**뿐이다 — 곡 상세 `otherEditions`(02 §3-3 에서 잘라 냄),
+> 관리 곡 목록의 `editionCount`(판본 전량 로드 금지, `count(*) group by work_id` 프로젝션으로), 자동 판정 §5-11(트랜잭션 청크, 03 §16).
 
 **추천 후보(candidate)** 는 컬럼이 아니라 계산값이다: `kind = COMPLETE_SCORE AND scope = COMPLETE AND pdf_file_id IS NOT NULL` 인 판본 중 `imslp_download_count` 최대(동률이면 id 최소). `recommended_edition_id` 가 있으면 후보를 표시하지 않는다. (컬럼으로 두면 "파일 받아오기" 뒤 갱신 누락이 생긴다.)
+
+> **추천 자동 지정(02 §5-11)** 은 이 후보 규칙에 `korea_copyright = FREE` 를 **더한** 것으로 고른다. 화면의 후보 표시(§4-7 `candidateEditionId`)는 판정 전에도 관리자에게 "이걸 추천으로 세우면 된다"를 보여줘야 하므로 판정 조건이 없지만, 자동 지정은 곡을 `READY` 로 만들어 **다운로드를 여는 행위**라 판정된 판본만 고른다.
 
 ### 3-4. `work_alias` — 곡 별칭
 
@@ -147,11 +155,20 @@ normalize(s):
 | work_id | BIGINT FK→work | N | |
 | catalog_value | VARCHAR(100) | N | 표시 원문 (`Op.27 No.2`, `WoO 59`, `K.331/300i`) — `value` 는 H2 예약어라 이 이름 |
 | catalog_value_normalized | VARCHAR(100) | N | `op27no2` |
-| sort_key | VARCHAR(120) | N | 작품번호 순 정렬용: normalized 값의 숫자 구간을 6자리 0-패딩 (`op000027no000002`, `bwv000846`). 문자열 정렬로 `Op.9 < Op.10` 이 되게 |
+| sort_key | VARCHAR(600) | N | 작품번호 순 정렬용: normalized 값의 숫자 구간을 6자리 0-패딩 (`op000027no000002`, `bwv000846`). 문자열 정렬로 `Op.9 < Op.10` 이 되게. **길이는 원문(100)이 아니라 팽창 후 기준**(2026-09-08 개정 — 아래) |
 | sort_order | INT | N | 곡 안 표시 순서(0부터). 0번이 대표 작품번호(다운로드 파일명·정렬에 사용) |
 | created_at | TIMESTAMP(6) | N | |
 
 인덱스: `uk_work_catalog(work_id, catalog_value_normalized)`, `idx_work_catalog_normalized`.
+
+> **`sort_key` 는 파생값이라 저장을 깨뜨리면 안 된다 (2026-09-08, senior-dev — 결함 6 테스트 중 발견).**
+> `catalog_value` 상한은 100자(02 §0-6)인데 `sort_key` 는 숫자 구간을 **6자리로 0-패딩**하므로 값이 **길어진다**.
+> `"Op.1 Op.1 …"`(99자, 숫자 20개)면 `op000001` 20개 = 160자로 부풀어 `VARCHAR(120)` 을 넘고,
+> **검증을 통과한 정상 입력이 500**(`DataIntegrityViolationException`)이 된다 — qa 결함 D3 와 같은 모양이다.
+> 최대 팽창은 100자 원문이 350자(`a1a1…` 처럼 1자리 숫자 50개 → 각 6자)라 **컬럼을 `VARCHAR(600)`** 으로 두고,
+> 계산 결과가 그보다 길면 **잘라서 쓴다**(잘린 정렬 키는 정렬이 뭉개질 뿐 데이터를 잃지 않는다).
+> 반대로 사용자에게 보이는 원문 상한을 내부 정렬 구현에 맞춰 줄이는 방향은 버린다 — 설명할 수 없는 제약이 된다.
+> 계약 검증: `AdminSaveLengthValidationIntegrationTest#work_catalogNumber_maxLength_andDerivedSortKeyDoesNotOverflow`.
 
 ### 3-6. `edition` — 판본 (= IMSLP 파일 1개 = PDF 1개)
 
@@ -184,12 +201,13 @@ IMSLP 의 `div.we` 블록 하나에 파일이 여러 개면 파일마다 행을 
 | korea_copyright | VARCHAR(30) | N | enum `KoreaCopyright`: `FREE / RESTRICTED / UNKNOWN`. 기본 **UNKNOWN** |
 | copyright_note | VARCHAR(1000) | Y | 판정 메모. FREE/RESTRICTED 일 때 필수(API 검증) |
 | copyright_judged_at | TIMESTAMP(6) | Y | 마지막 판정 시각 |
-| copyright_judged_by | VARCHAR(100) | Y | 판정한 관리자 username |
+| copyright_judged_by | VARCHAR(100) | Y | 판정한 관리자 username. **자동 판정(02 §5-11)은 고정 센티널 `system:auto`** — username 에는 `:` 가 못 들어가므로 사람 판정과 절대 겹치지 않고, 되돌리기(§5-12) 대상을 이 값 하나로 고를 수 있다 |
 | cc_license_name | VARCHAR(100) | Y | 사용자 표시용 (`CC BY-SA 4.0`) |
 | cc_attribution | VARCHAR(200) | Y | 표기할 저작자 |
 | file_fetch_status | VARCHAR(30) | Y | enum `FileFetchStatus`: `QUEUED / FETCHING / FAILED`. NULL = 요청 없음/완료 |
 | file_fetch_error | VARCHAR(300) | Y | 마지막 받아오기 실패 사유 |
 | file_fetched_at | TIMESTAMP(6) | Y | 수집/받아오기로 파일을 얻은 시각 |
+| admin_edited_at | TIMESTAMP(6) | Y | **2026-09-07 추가.** 관리자가 §5-3 으로 이 판본을 저장한 마지막 시각. NULL = 아직 사람이 손대지 않음(수집이 만든 그대로). **재수집이 관리자 편집 필드를 덮을지 판단하는 유일한 근거**(02 §6-12). §5-9 저작권 판정으로는 찍지 않는다 — 판정은 편집이 아니고, 표기 원문은 계속 IMSLP 를 따라가야 라이선스 강등 회수(02 §6-12 (2))가 작동한다 |
 | download_count | BIGINT | N | 기본 0. 우리 서비스 다운로드 수 |
 | created_at / updated_at | TIMESTAMP(6) | N | |
 
@@ -202,9 +220,29 @@ IMSLP 의 `div.we` 블록 하나에 파일이 여러 개면 파일마다 행을 
 | 컬럼 | 타입 | NULL | 설명 |
 |---|---|---|---|
 | id | BIGINT PK | N | |
-| edition_id | BIGINT FK→edition | N | |
-| work_id | BIGINT FK→work | N | 비정규화(판본 삭제 후에도 곡 집계 유지 목적이 아니라 조회 편의. 판본 삭제 시 로그도 삭제) |
+| edition_id | BIGINT FK→edition | **Y** | **2026-09-08 개정**: 판본 삭제 시 로그를 지우지 않고 이 값만 `NULL` 로 만든다 |
+| work_id | BIGINT FK→work | N | 비정규화. **로그의 주인은 곡이다** — 판본 삭제 후에도 곡 단위 집계를 유지하기 위한 것이며(조회 편의가 아니다), 곡 삭제 시에만 로그를 지운다 |
 | downloaded_at | TIMESTAMP(6) | N | |
+
+> **`download_log` 가 원장이고 `work.download_count` 는 그 합계 캐시다 (2026-09-08 확정, senior-dev — qa 3차 결함 8).**
+> 4번 받은 판본을 지우면 `work.download_count` 는 4인데 로그는 0행이 되어, **인기곡 정렬(02 §3-2)** 과
+> **대시보드 `monthlyDownloads`(02 §4-1)** 가 같은 사건을 다르게 셌다(실측 13 → 9).
+> 다운로드는 **곡 단위 사건**이다 — 사용자가 받은 것은 "월광 소나타" 이지 "판본 #301" 이 아니고,
+> 판본은 우리가 운영상 교체하는 파일일 뿐이다. 그래서 **판본 삭제로는 로그도 `work.download_count` 도 줄지 않는다**.
+> 곡 삭제는 로그도 지운다(`work_id` 가 NOT NULL 이라 가리킬 곳이 없어진다).
+
+> **기존 DB 마이그레이션이 필요하다 (2026-09-08, senior-dev — backend-dev 재현 보고).**
+> `edition_id` 의 `NOT NULL` **해제는 비추가형 변경**이라 `ddl-auto: update` 가 반영하지 않는다.
+> 이미 스키마가 만들어진 로컬 파일 H2·운영 MySQL 에서는 컬럼이 그대로 `NOT NULL` 이므로, 위 규칙대로 구현해도
+> **판본 삭제가 500(`NULL not allowed for column "EDITION_ID"`)** 으로 실패한다. 테스트는 `create-drop` 이라 못 잡는다(03 §17-5).
+> 한 줄 적용:
+> ```sql
+> -- H2 (로컬 파일 DB: data/devdb)
+> ALTER TABLE download_log ALTER COLUMN edition_id SET NULL;
+> -- MySQL 8 (운영)
+> ALTER TABLE download_log MODIFY edition_id BIGINT NULL;
+> ```
+> 새로 만드는 DB(테스트·초기화 후 로컬)는 엔티티대로 생성되므로 실행할 필요가 없다. 대장은 §9.
 
 인덱스: `idx_download_log_downloaded_at`, `idx_download_log_work`. 개인정보(IP·UA)는 저장하지 않는다. "이번 달 다운로드 수" = `downloaded_at >= Asia/Seoul 이번 달 1일 00:00 (UTC 환산)`.
 
@@ -246,7 +284,7 @@ IMSLP 의 `div.we` 블록 하나에 파일이 여러 개면 파일마다 행을 
 | fail_reason | VARCHAR(30) | Y | enum `CrawlFailReason`: `PAGE_NOT_FOUND / NO_PDF_EDITION / FILE_DOWNLOAD_FAILED / IMSLP_UNAVAILABLE / INTERRUPTED / INTERNAL_ERROR`(메타 읽기 중 예상 밖 오류 = 우리 쪽 버그, 2026-09-07 추가) |
 | message | VARCHAR(500) | Y | 사람이 읽을 결과 문구(성공: "판본 14개, 파일 2개 받음") |
 | work_id | BIGINT FK→work | Y | 만들었거나 붙인 곡 |
-| edition_count / file_count | INT | Y | 결과 요약 |
+| edition_count / file_count | INT | Y | 결과 요약. **FAILED 라도 곡·판본이 이미 저장됐다면 채운다** — 파일 단계 실패(`FILE_DOWNLOAD_FAILED`)와 파일 단계 무응답(`IMSLP_UNAVAILABLE`) 모두 해당(2026-09-07 명확화, 02 §6-10) |
 | started_at / finished_at | TIMESTAMP(6) | Y | |
 
 인덱스: `idx_crawl_item_job_status(job_id, status)`.
@@ -263,7 +301,7 @@ IMSLP 의 `div.we` 블록 하나에 파일이 여러 개면 파일마다 행을 
 | `EditionKind` | COMPLETE_SCORE / PARTS / ARRANGEMENT | edition.kind |
 | `EditionScope` | COMPLETE / MOVEMENT | edition.scope |
 | `WorkStatus` (계산값, 컬럼 아님) | READY(바로 받기 가능) / PREPARING(준비 중) / RESTRICTED(이용 제한) / UNKNOWN(저작권 확인 중) | 검색·상세·관리 목록 |
-| `WorkMissing` (계산값) | TITLE_KO / ALIAS / LEVEL / RECOMMENDED_EDITION | 관리 "보완 필요" |
+| `WorkMissing` (계산값) | TITLE_KO / ALIAS / LEVEL / RECOMMENDED_EDITION / **COPYRIGHT_JUDGMENT** | 관리 "보완 필요" |
 | `HiddenReason` | NOT_PIANO_SOLO | work.hidden_reason |
 | `AliasSource` | ADMIN / SEED / IMSLP | work_alias.source |
 | `FileFetchStatus` | QUEUED / FETCHING / FAILED | edition.file_fetch_status |
@@ -286,8 +324,28 @@ else                                                        → UNKNOWN
 ```
 "바로 받기 가능" 필터 = `READY`. 판본 단위 "바로 받기 가능" = `pdf_file_id IS NOT NULL AND korea_copyright = FREE`.
 
-### 보완 필요 계산 (`needsWork`, 관리자 전용)
-`title_ko` 가 NULL/공백 **또는** 별칭 0개 **또는** level NULL **또는** recommended_edition_id NULL → 보완 필요. `missing[]` 에 해당 항목을 나열한다.
+### 보완 필요 계산 (`needsWork`, 관리자 전용) — 2026-09-08 개정 (기획 §11-1)
+
+`missing[]` 은 아래 다섯 가지를 **이 순서로** 담는다. 하나라도 있으면 `needsWork = true`.
+
+| 값 | 조건 |
+|---|---|
+| `TITLE_KO` | `title_ko` 가 NULL/공백 |
+| `ALIAS` | 별칭 0개 |
+| `LEVEL` | `level` NULL(난이도 미정) |
+| `RECOMMENDED_EDITION` | `recommended_edition_id` NULL |
+| `COPYRIGHT_JUDGMENT` | 추천 판본이 **있고** 그 판본의 `korea_copyright = UNKNOWN` |
+
+- `RECOMMENDED_EDITION` 과 `COPYRIGHT_JUDGMENT` 는 **동시에 나올 수 없다**(앞은 추천 없음, 뒤는 추천 있음).
+- **`RESTRICTED` 는 세지 않는다** — 사람이 내린 결론이라 할 일이 아니라 끝난 일이다(기획 §11-1).
+- 이 규칙을 쓰는 곳은 **셋뿐이고 전부 같은 함수를 쓴다**: 관리 곡 목록 필터 `status=NEEDS_WORK`(02 §4-6) ·
+  관리 홈 `needsWorkWorks`(02 §4-1) · 곡 상세 `missing[]`(02 §4-7). 한 곳에서 사라진 곡이 다른 곳에 남으면 결함이다.
+
+> **왜 추가했나 (기획 §11-1).** '보완 필요'가 답하는 질문은 "필드가 비었나"가 아니라 **"이 곡을 사용자에게 열어 주려면 뭐가 남았나"** 다.
+> 자동 판정 되돌리기(02 §5-12)는 추천을 유지한 채 판정만 `UNKNOWN` 으로 되돌리므로, 옛 규칙에서는 그 곡이
+> `RECOMMENDED_EDITION` 도 아니어서 **일감 목록에서 사라졌다** — 되돌리기를 누른 이유(다시 보겠다)가 무효가 된다.
+> 참고: 되돌리기 후 그 곡의 `WorkStatus` 는 `PREPARING` 이 아니라 `UNKNOWN` 이다(추천이 남아 있으므로).
+> 그래서 대시보드의 `preparingWorks` 는 실행 전 값으로 돌아가지 않고, `readyWorks`·`needsWorkWorks`·`unknownCopyrightEditions` 가 돌아간다.
 
 ---
 
@@ -330,14 +388,41 @@ else                                                        → UNKNOWN
 | aliases | `월광\|월광 소나타\|Moonlight Sonata\|…` — 03 은 쉼표 구분이지만 CSV 에서는 `\|` 로 옮긴다(제목 열의 쉼표와 헷갈리지 않게). 띄어쓰기만 다른 변형은 로더가 정규화 중복으로 자동 제거(03 §5-1) |
 | level | INTERMEDIATE |
 | imslp_url | `https://imslp.org/wiki/Piano_Sonata_No.14,_Op.27_No.2_(Beethoven,_Ludwig_van)` — 로더가 정규화 |
+| collection_guide | `이 악보에는 왈츠 3곡이 들어 있어요 — …` — **2026-09-08 추가**. 03 §10 표의 문구 그대로(38곡), 단일 곡 12곡은 빈 칸. `work.collection_guide` 로 적재 |
+
+> **`seq`(큐레이션 노출 순서) 열은 읽지 않는다 — 컬럼으로도 두지 않는다 (2026-09-08 결정, senior-dev).**
+> CSV 에 남겨 두는 것은 사람이 03 문서와 대조하기 위한 것이고, 엔티티·DB 에는 싣지 않는다.
+> 인기곡 tie-breaker 로 쓰자는 요구(기획 §11-3)는 **난이도 오름차순 → 가나다**로 대신한다 — 근거는 `03_기술결정.md` §18.
 
 무소르그스키(2차 후보)는 `composers.csv` 에서 제외한다(03 §2 각주).
 
+### 3-10. `seed_load` — 시드 적재 기록 (2026-09-07 추가)
+
+| 컬럼 | 타입 | NULL | 설명 |
+|---|---|---|---|
+| id | BIGINT PK | N | |
+| seed_type | VARCHAR(30) | N | enum `SeedType`: `COMPOSER / WORK / COLLECTION_GUIDE`(2026-09-08 추가 — §6 백필) |
+| natural_key | VARCHAR(500) | N | 작곡가 `name_original_normalized`, 곡 `imslp_url`(정규 형태) |
+| loaded_at | TIMESTAMP(6) | N | |
+
+인덱스: `uk_seed_load(seed_type, natural_key)`.
+
+> **왜 필요한가.** 03 §17 로 로컬 DB 가 **파일 DB**(재시작을 넘어 살아남음)가 되면서, "없으면 INSERT" 만으로는
+> **관리자가 §4-9 로 지운 시드 곡이 다음 기동에 새 id 로 되살아난다**. 삭제가 되돌려지고 그 곡에 붙은 작업도 다시 해야 한다.
+> 운영(MySQL)도 같은 구조라 배포마다 반복된다. 적재 기록을 남기면 "지웠으니 다시 넣지 않는다" 와
+> "CSV 에 새로 추가된 행은 다음 배포에 들어온다" 를 동시에 만족한다. 검증: `SeedDeletionIntegrationTest`.
+
 ### 로더 규칙
-- 실행 시점: 매 기동(로컬은 DB 가 휘발이므로 매번 새로 들어감 = 컨벤션 §5-2 와 동일 효과). `app.seed.enabled`(기본 true) 로 끌 수 있다. 테스트 프로파일도 true — 검색 인수조건("월광" → 소나타 14번)을 실제 시드로 검증한다.
+- 실행 시점: 매 기동. `app.seed.enabled`(기본 true) 로 끌 수 있다. 테스트 프로파일도 true — 검색 인수조건("월광" → 소나타 14번)을 실제 시드로 검증한다.
 - **멱등·삽입 전용**: 작곡가는 `name_original_normalized`, 곡은 `imslp_url` 로 존재 여부를 보고 **없을 때만 INSERT**. 있으면 어떤 컬럼도 덮어쓰지 않는다(관리자 수정 보호). 별칭·작품번호는 정규화 값이 없을 때만 추가(`source = SEED`).
+- **한 번 적재한 행은 다시 적재하지 않는다**(2026-09-07): CSV 행마다 `seed_load` 에 자연키가 있으면 **건너뛴다**. 없으면 (INSERT 했든, 이미 같은 자연키의 행이 DB 에 있어 건너뛰었든) `seed_load` 에 기록을 남긴다 — 기록이 없는 기존 DB 에서 첫 실행이 중복을 만들지 않게 하기 위해서다.
 - 운영(MySQL, `sql.init.mode=never`)에서도 로더는 돈다 → 첫 배포에 1회 적재, 이후 기동은 no-op. 03 문서가 검수로 바뀌면 CSV 갱신 → 다음 배포에서 새 행만 추가된다. 삭제·수정은 관리자 화면에서.
-- 시드 곡은 `recommended_edition_id = NULL`, 판본 0개 → 사용자에게 "준비 중"으로 보이며 별칭 검색은 즉시 된다. 수집이 같은 `imslp_url` 을 처리하면 `ATTACH` 모드로 판본을 붙인다(03 §9-3 가정).
+- **`collection_guide` 1회 백필 (2026-09-08 추가)** — 위 "한 번 적재한 행은 다시 적재하지 않는다" 규칙 때문에, 컬럼을 새로 만들면 **이미 적재된 시드 곡 50개는 영원히 NULL** 이다(로컬 파일 DB·운영 모두). 그러면 묶음 악보 38곡의 곡 상세에서 사용자가 검색한 이름이 화면 어디에도 없다(기획 §10-3). 그래서 이 값만 별도 패스로 채운다.
+  1. CSV 행의 `collection_guide` 가 비어 있지 않고, `seed_load(COLLECTION_GUIDE, imslp_url)` **기록이 없을 때만** 대상.
+  2. `imslp_url` 로 곡을 찾아 **`collection_guide` 가 NULL/공백일 때만** 채운다(관리자가 이미 쓴 값은 덮지 않는다).
+  3. 곡이 없든, 값이 이미 있든, 채웠든 — 결과와 무관하게 `seed_load(COLLECTION_GUIDE, …)` 기록을 남긴다. **그래서 다음 기동부터는 아무 일도 하지 않는다**(관리자가 지운 문구가 되살아나지 않는다).
+  4. 이 예외는 **`collection_guide` 한 컬럼에만** 적용한다. 다른 컬럼을 같은 방식으로 백필하고 싶어지면 그때 이 절을 다시 연다 — "시드는 삽입 전용" 원칙에 구멍을 여러 개 뚫으면 시드가 관리자 입력을 언제 덮는지 아무도 설명하지 못하게 된다.
+- 시드 곡은 `recommended_edition_id = NULL`, 판본 0개
 
 ---
 
@@ -347,11 +432,14 @@ else                                                        → UNKNOWN
 |---|---|
 | 작곡가 삭제 | 곡 1개라도 있으면 거부(400). 없으면 별칭 → 작곡가 |
 | 곡 삭제 | `recommended_edition_id = NULL` → 판본마다(§아래 판본 삭제) → download_log(work) → 별칭·작품번호(cascade) → crawl_item.work_id NULL 처리 → 곡 |
-| 판본 삭제 | 추천이면 곡의 `recommended_edition_id = NULL` → download_log(edition) 삭제 → `files` 행(pdf, preview) 삭제 + 바이트 삭제는 **커밋 후**(기존 `FileService.registerBytesDeletionAfterCommit` 패턴) → 판본 |
+| 판본 삭제 | 추천이면 곡의 `recommended_edition_id = NULL` → **download_log(edition) 의 `edition_id` 를 NULL 로**(행은 남긴다 — §3-7) → `files` 행(pdf, preview) 삭제 + 바이트 삭제는 **커밋 후**(기존 `FileService.registerBytesDeletionAfterCommit` 패턴) → 판본 |
 | 파일 교체 | 새 files 행 연결 후 옛 files 행 삭제(바이트는 커밋 후) |
 | 추천 지정 | 대상 판본이 그 곡의 것이고 `pdf_file_id IS NOT NULL` 일 때만. 이전 추천은 자동 해제(컬럼 하나라 자연히) |
 | 다운로드 | 파일 Resource 확보 성공 후 짧은 트랜잭션에서 `edition.download_count+1`, `work.download_count+1`, `download_log` INSERT(원자적 UPDATE 문). 실패(파일 없음)면 아무것도 올리지 않는다 |
-| 수집 upsert | `imslp_url` 로 곡 조회 → 없으면 생성(CREATE), 있으면 판본만 붙임(ATTACH/REFRESH). 판본은 `imslp_file_id` 로 조회 → 있으면 메타만 갱신(파일·판정·메모는 보존), 없으면 생성 |
+| 수집 upsert | `imslp_url` 로 곡 조회 → 없으면 생성(CREATE), 있으면 판본만 붙임(ATTACH/REFRESH). 판본은 `imslp_file_id` 로 조회 → 있으면 메타만 갱신(파일·판정·메모는 보존), 없으면 생성. **갱신 범위·라이선스 강등 회수는 02 §6-12** |
+| 수집 판본 조회 | `imslp_file_id` 는 전역 UNIQUE 라 조회도 전역이다. 찾은 판본의 `work_id` 가 **지금 수집 중인 곡이 아니면** 그 판본은 건드리지 않고 건너뛴다(경고 로그) — 다른 곡의 판본을 조용히 갱신하거나 곡 사이를 옮겨 다니면 판본 수 집계와 추천이 어긋난다 (2026-09-07 추가) |
+| 파일 받아오기 결과 붙이기 | 대상 판본이 **그 사이에 파일을 갖게 되었으면 붙이지 않는다** — 받아온 `files` 행을 삭제하고 `file_fetch_status` 만 비운다. 덮어쓰면 밀려난 행이 `ref_id ≠ 0` 이라 orphan 배치가 못 지운다 (02 §5-7, 2026-09-07 추가) |
+| 재시작 복구 | `file_fetch_status IN (QUEUED, FETCHING)` 인 판본은 `FAILED` + 사유로 되돌린다 — 비동기 작업은 프로세스와 함께 사라졌는데 상태만 남으면 §5-7 이 409 로 영구히 막는다 (2026-09-07 추가) |
 
 ---
 
@@ -363,3 +451,97 @@ else                                                        → UNKNOWN
 - NULL 허용 UNIQUE(`work.imslp_url`, `edition.imslp_file_id`): 양쪽 모두 NULL 여러 개 허용.
 - 정렬 collation: 한글 가나다순은 utf8mb4 계열/H2 기본 모두 코드포인트 순 = 가나다 순. 대소문자 무시 비교는 collation 에 기대지 않고 정규화 컬럼으로 한다.
 - 예약어: §1 표 참고. `@Column(name=…)` 으로 전부 명시해 Hibernate 네이밍 전략 차이에 기대지 않는다.
+
+---
+
+## 9. 마이그레이션 대장 (비추가형 스키마 변경 — 2026-09-08 신설)
+
+`ddl-auto: update` 는 **추가만** 한다. 아래 표에 있는 변경은 이미 스키마가 만들어진 DB(로컬 `data/devdb`, 운영 MySQL)에
+저절로 반영되지 않으므로 **손으로 한 번 실행**해야 한다. 규칙은 `03_기술결정.md` §17-5.
+
+| 날짜 | 변경 | H2(로컬) | MySQL 8(운영) | 안 하면 |
+|---|---|---|---|---|
+| 2026-09-08 | `download_log.edition_id` **NOT NULL 해제**(§3-7) | `ALTER TABLE download_log ALTER COLUMN edition_id SET NULL;` | `ALTER TABLE download_log MODIFY edition_id BIGINT NULL;` | 판본 삭제가 500(`NULL not allowed for column "EDITION_ID"`) |
+| 2026-09-08 | `seed_load.seed_type` 에 **enum 값 `COLLECTION_GUIDE` 추가**(§3-10·§6 백필) | `ALTER TABLE seed_load ALTER COLUMN seed_type ENUM('COMPOSER','WORK','COLLECTION_GUIDE') NOT NULL;` | `ALTER TABLE seed_load MODIFY seed_type ENUM('COMPOSER','WORK','COLLECTION_GUIDE') NOT NULL;` | **애플리케이션이 기동하지 못한다.** 기존 DB 의 컬럼은 `ENUM('COMPOSER','WORK')` 라 `SeedLoader` 의 조회가 `Value not permitted for column "('COMPOSER','WORK')": "COLLECTION_GUIDE" [22030-224]` 로 터진다(값을 쓰기 전에 **읽기부터** 깨진다) |
+| 2026-09-08 | **enum 컬럼 16개를 네이티브 `ENUM(...)` → `VARCHAR` 로 고정**(§9-1, 근거 `03_기술결정.md` §17-6) | 아래 §9-1 문장 | 아래 §9-1 문장 | 다음에 enum 상수를 하나 추가할 때마다 위와 같은 기동 실패·조회 실패가 반복된다(테스트는 `create-drop` 이라 끝까지 초록) |
+
+살아 있는 로컬 DB(`data/devdb`)에는 위 두 건 중 **`seed_load` 건이 2026-09-08 에 적용됐다**(백업 후 실행, 기동 확인). §9-1 은 backend-dev 적용 대기.
+새 DB(테스트 `create-drop`, 초기화 후 로컬, 첫 배포 MySQL)는 엔티티대로 생성되므로 실행할 필요가 없다.
+**추가형 변경(nullable 컬럼·새 테이블·인덱스)은 이 표에 적지 않는다** — `update` 가 알아서 한다.
+이번 함께 들어가는 `work.collection_guide`(§3-3)가 그 예다.
+
+### 9-1. enum 컬럼 → VARCHAR 고정 (2026-09-08)
+
+**무엇을 바꾸나.** 우리는 모든 상태값을 `@Enumerated(EnumType.STRING)` 으로 쓰는데, Hibernate 6 은 H2·MySQL 에서
+그 컬럼의 **DDL 타입을 네이티브 `enum('A','B')` 로** 만든다(`H2Dialect.getEnumTypeDeclaration`, `EnumJavaType.getRecommendedJdbcType`
+— `@Column(length=30)` 은 무시된다). 실제 생성 DDL 로 확인한 대상은 **16개 컬럼**이다:
+
+| 테이블 | 컬럼 | 현재 DDL |
+|---|---|---|
+| work | level | `enum ('ADVANCED','BEGINNER','ELEMENTARY','INTERMEDIATE')` |
+| work | hidden_reason | `enum ('NOT_PIANO_SOLO')` ← **값이 하나뿐이다** |
+| work_alias | source | `enum ('ADMIN','IMSLP','SEED')` |
+| edition | kind | `enum ('ARRANGEMENT','COMPLETE_SCORE','PARTS')` |
+| edition | scope | `enum ('COMPLETE','MOVEMENT')` |
+| edition | korea_copyright | `enum ('FREE','RESTRICTED','UNKNOWN')` |
+| edition | imslp_license_code | `enum ('CC0','CC_BY','CC_BY_NC','CC_BY_NC_ND','CC_BY_NC_SA','CC_BY_SA','OTHER','PD')` |
+| edition | file_fetch_status | `enum ('FAILED','FETCHING','QUEUED')` |
+| crawl_job | status | `enum ('COMPLETED','FAILED','PAUSED','RUNNING','STOPPED')` |
+| crawl_job | current_stage | `enum ('DOWNLOADING_FILE','MAKING_PREVIEW','READING_METADATA')` |
+| crawl_item | item_mode | `enum ('ATTACH','CREATE','REFRESH','SKIP')` |
+| crawl_item | status | `enum ('FAILED','HIDDEN','PENDING','PROCESSING','SKIPPED','SUCCESS')` |
+| crawl_item | fail_reason | `enum ('FILE_DOWNLOAD_FAILED','IMSLP_UNAVAILABLE','INTERNAL_ERROR','INTERRUPTED','NO_PDF_EDITION','PAGE_NOT_FOUND')` |
+| seed_load | seed_type | `enum ('COLLECTION_GUIDE','COMPOSER','WORK')` |
+| files | ref_type | `enum ('COMMUNITY','EDITION','USER')` ← 새 도메인이 파일을 붙일 때마다 늘어난다 |
+| files | file_usage | `enum ('ATTACHMENT','IMAGES','THUMBNAIL')` |
+
+**엔티티 변경(backend-dev)** — 위 16개 필드에 `@JdbcTypeCode(SqlTypes.VARCHAR)`(`org.hibernate.annotations` / `org.hibernate.type`)를 붙인다.
+`@Enumerated(EnumType.STRING)` 과 `@Column(length = 30)` 은 그대로 둔다(길이는 이제 실제로 DDL 에 쓰인다).
+`files.ref_type` / `files.file_usage` 는 `length` 가 없으므로 `@Column(length = 30)` 을 함께 붙여 `varchar(255)` 가 되지 않게 한다.
+전역 설정으로는 못 바꾼다 — `hibernate.type.prefer_native_enum_types` 는 `@Enumerated(STRING)` 경로를 타지 않는다(6.5 `EnumJavaType` 확인).
+
+**기존 DB 마이그레이션** — 16개 컬럼 전부. `NOT NULL` 여부는 현재 정의를 그대로 유지한다.
+
+```sql
+-- H2 (로컬 data/devdb) : ALTER TABLE t ALTER COLUMN c VARCHAR(30) [NOT NULL];
+ALTER TABLE work       ALTER COLUMN level              VARCHAR(30);
+ALTER TABLE work       ALTER COLUMN hidden_reason      VARCHAR(30);
+ALTER TABLE work_alias ALTER COLUMN source             VARCHAR(30) NOT NULL;
+ALTER TABLE edition    ALTER COLUMN kind               VARCHAR(30) NOT NULL;
+ALTER TABLE edition    ALTER COLUMN scope              VARCHAR(30) NOT NULL;
+ALTER TABLE edition    ALTER COLUMN korea_copyright    VARCHAR(30) NOT NULL;
+ALTER TABLE edition    ALTER COLUMN imslp_license_code VARCHAR(30);
+ALTER TABLE edition    ALTER COLUMN file_fetch_status  VARCHAR(30);
+ALTER TABLE crawl_job  ALTER COLUMN status             VARCHAR(30) NOT NULL;
+ALTER TABLE crawl_job  ALTER COLUMN current_stage      VARCHAR(30);
+ALTER TABLE crawl_item ALTER COLUMN item_mode          VARCHAR(30) NOT NULL;
+ALTER TABLE crawl_item ALTER COLUMN status             VARCHAR(30) NOT NULL;
+ALTER TABLE crawl_item ALTER COLUMN fail_reason        VARCHAR(30);
+ALTER TABLE seed_load  ALTER COLUMN seed_type          VARCHAR(30) NOT NULL;
+ALTER TABLE files      ALTER COLUMN ref_type           VARCHAR(30);
+ALTER TABLE files      ALTER COLUMN file_usage         VARCHAR(30);
+
+-- MySQL 8 (운영) : ALTER TABLE t MODIFY c VARCHAR(30) [NOT NULL];
+ALTER TABLE work       MODIFY level              VARCHAR(30);
+ALTER TABLE work       MODIFY hidden_reason      VARCHAR(30);
+ALTER TABLE work_alias MODIFY source             VARCHAR(30) NOT NULL;
+ALTER TABLE edition    MODIFY kind               VARCHAR(30) NOT NULL;
+ALTER TABLE edition    MODIFY scope              VARCHAR(30) NOT NULL;
+ALTER TABLE edition    MODIFY korea_copyright    VARCHAR(30) NOT NULL;
+ALTER TABLE edition    MODIFY imslp_license_code VARCHAR(30);
+ALTER TABLE edition    MODIFY file_fetch_status  VARCHAR(30);
+ALTER TABLE crawl_job  MODIFY status             VARCHAR(30) NOT NULL;
+ALTER TABLE crawl_job  MODIFY current_stage      VARCHAR(30);
+ALTER TABLE crawl_item MODIFY item_mode          VARCHAR(30) NOT NULL;
+ALTER TABLE crawl_item MODIFY status             VARCHAR(30) NOT NULL;
+ALTER TABLE crawl_item MODIFY fail_reason        VARCHAR(30);
+ALTER TABLE seed_load  MODIFY seed_type          VARCHAR(30) NOT NULL;
+ALTER TABLE files      MODIFY ref_type           VARCHAR(30);
+ALTER TABLE files      MODIFY file_usage         VARCHAR(30);
+```
+
+- **값은 그대로 보존된다** — 네이티브 ENUM 도 저장된 값은 문자열이고 Hibernate 는 이미 VARCHAR 로 바인딩한다(`EnumJdbcType.getJdbcTypeCode() == VARCHAR`).
+  MySQL 은 이 ALTER 가 테이블 재작성이라 큰 테이블에서는 느리다 — **운영 DB 가 없는 지금이 가장 싼 시점**이다.
+- 이 변경을 하고 나면 **앞으로 enum 상수 추가는 순수 추가형**이 되어 이 대장에 적을 일이 없다.
+- 회귀 가드: `SchemaEnumColumnTypeIntegrationTest` — 생성된 스키마에 `DATA_TYPE = 'ENUM'` 인 컬럼이 하나도 없어야 한다.
+  (`create-drop` 테스트가 이 사고를 못 잡는다는 §17-5 의 구멍을, "엔티티가 만드는 DDL 자체"를 보게 해서 메운다.)
