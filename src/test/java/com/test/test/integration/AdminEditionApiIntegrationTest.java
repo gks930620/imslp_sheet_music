@@ -311,8 +311,13 @@ class AdminEditionApiIntegrationTest extends AdminApiTestSupport {
         JsonNode data = data(adminPut(admin, "/api/admin/editions/{id}", same, editionId).andExpect(status().isOk()));
         assertThat(data.path("pdfFileId").asLong()).isEqualTo(fileId);
         assertThat(data.path("hasFile").asBoolean()).isTrue();
-        // 파일이 그대로 살아 있다 — 미리보기 프록시로 확인(공용 파일 API 는 EDITION 을 다루지 않는다, §3-4)
-        mockMvc.perform(get(upload.path("previewUrl").asText())).andExpect(status().isOk());
+        // 파일이 그대로 살아 있다 — 미리보기 프록시로 확인(공용 파일 API 는 EDITION 을 다루지 않는다, §3-4).
+        // ADMIN 토큰을 싣는 이유는 이 판본이 UNKNOWN 이라서다: §0-4(2026-09-08)로 비 FREE 판본의 미리보기는
+        // 비로그인에게 404 다. 여기서 보려는 것은 게이트가 아니라 "바이트가 살아 있는가" 하나뿐이므로
+        // 게이트를 통과하는 신분으로 묻는다. 게이트 자체는 EditionPreviewExposureIntegrationTest 가 잠근다.
+        mockMvc.perform(get(upload.path("previewUrl").asText())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(admin.accessToken())))
+                .andExpect(status().isOk());
 
         // 새 파일로 교체하면서 pageCount 를 안 주면 새 파일 값(2)
         JsonNode second = uploadSamplePdf(admin);

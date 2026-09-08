@@ -41,8 +41,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   <li>404 응답은 <b>본문 없이</b> 준다. {@code /uploads} 는 {@code <img src>}·PDF 뷰어가 직접 무는
  *       바이트 엔드포인트라 §0-1 의 JSON 래퍼를 쓰지 않으며, 한 엔드포인트가 404 를 두 모양으로 내려주면
  *       호출자가 분기해야 한다(바이트가 없을 때도 지금 빈 404 다).</li>
- *   <li>미리보기 PNG({@code previewUrl})·커뮤니티 이미지·첨부는 <b>그대로 200</b>. 게이트가 판본 파일을
- *       통째로 막아 버리면 검색 카드·라이트박스가 전부 깨진다.</li>
+ *   <li>커뮤니티 이미지·첨부는 <b>그대로 200</b>. 게이트가 판본 파일을 통째로 막아 버리면 화면이 깨진다.</li>
+ *   <li>미리보기 PNG({@code previewUrl})는 그 판본이 {@code FREE} 일 때 200, 아니면 <b>404 (ADMIN 만 200)</b>
+ *       — 2026-09-08 §0-4 개정(qa 4차 결함 2). 이 파일이 원래 적어 둔 "미리보기는 제한 판본이어도 보여 준다" 는
+ *       뒤집혔다. 규칙 전체는 {@link EditionPreviewExposureIntegrationTest} 가 잠그고, 여기서는
+ *       <b>/uploads 문 자체</b>의 회귀만 본다.</li>
  * </ul>
  *
  * <p>바이트 동일성 회귀는 {@link FileServingContractIntegrationTest} 가 잠근다 —
@@ -100,10 +103,10 @@ class UploadsServingGateIntegrationTest extends AdminApiTestSupport {
     }
 
     @Test
-    @DisplayName("미리보기 PNG 는 계속 200 image/png — 게이트가 판본 파일을 통째로 막으면 화면이 깨진다")
-    void previewPngIsStillServed() throws Exception {
+    @DisplayName("FREE 판본의 미리보기 PNG 는 계속 200 image/png — 게이트가 판본 파일을 통째로 막으면 화면이 깨진다")
+    void previewPngOfFreeEditionIsStillServed() throws Exception {
         Tokens admin = loginAdmin();
-        EditionFiles files = createEditionWithFile(admin, "RESTRICTED", "테스트 판정 근거");
+        EditionFiles files = createEditionWithFile(admin, "FREE", "테스트 판정 근거");
 
         MvcResult result = mockMvc.perform(get(files.previewWebPath()))
                 .andExpect(status().isOk())
@@ -111,7 +114,42 @@ class UploadsServingGateIntegrationTest extends AdminApiTestSupport {
                 .andReturn();
 
         assertThat(result.getResponse().getContentAsByteArray())
-                .as("미리보기는 저작권 제한 판본이어도 보여 준다(§3-3 — 표지 한 장은 '무엇인지 알아보는' 정보다)")
+                .as("검색 카드·라이트박스가 무는 바이트다 — 게이트는 '무엇을' 막는지 구분해야 한다")
+                .isNotEmpty();
+
+        // 같은 판본이라도 PDF 는 판정이 FREE 여도 404 — 판본 바이트가 나가는 문은 §3-4 하나뿐이다
+        mockMvc.perform(get(files.pdfWebPath()))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * §0-4 2026-09-08 개정(qa 4차 결함 2). 이 시험은 원래 "미리보기는 저작권 제한 판본이어도 보여 준다" 였다 —
+     * 그 전제가 뒤집혔다. 판정이 안 끝났거나 제한된 판본의 미리보기는 <b>응답과 서빙을 둘 다</b> 막는다.
+     * 재배포 책임은 우리 도메인이 그 바이트를 주느냐로 정해지지, 우리 JSON 이 주소를 알려줬느냐로 정해지지 않는다.
+     *
+     * <p>ADMIN 만 통과하는 이유는 <b>미리보기 그 자체가 판정 근거</b>라서다(기획 §F6-4 (B)3) — 감추면 판정이 불가능하다.
+     * 그래서 회귀 가드는 404 와 ADMIN 200 을 <b>둘 다</b> 잠근다. 한쪽만 잠그면 "전부 막기"·"전부 열기" 로 고쳐도 통과한다.
+     */
+    @Test
+    @DisplayName("이용 제한 판본의 미리보기 PNG: 비로그인 404(본문 없음), ADMIN 만 200")
+    void previewPngOfRestrictedEditionIsHiddenFromAnonymousButServedToAdmin() throws Exception {
+        Tokens admin = loginAdmin();
+        EditionFiles files = createEditionWithFile(admin, "RESTRICTED", "테스트 판정 근거");
+
+        MvcResult anonymous = mockMvc.perform(get(files.previewWebPath()))
+                .andExpect(status().isNotFound())
+                .andReturn();
+        assertThat(anonymous.getResponse().getContentAsString(StandardCharsets.ISO_8859_1))
+                .as("§0-4: /uploads 의 404 는 본문 없이 준다")
+                .isEmpty();
+
+        MvcResult forAdmin = mockMvc
+                .perform(get(files.previewWebPath()).header(HttpHeaders.AUTHORIZATION, bearer(admin.accessToken())))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_PNG_VALUE))
+                .andReturn();
+        assertThat(forAdmin.getResponse().getContentAsByteArray())
+                .as("관리자는 판정하려면 표지를 봐야 한다")
                 .isNotEmpty();
     }
 

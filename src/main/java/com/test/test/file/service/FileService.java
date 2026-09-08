@@ -16,6 +16,8 @@ import com.test.test.jwt.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -37,12 +39,15 @@ public class FileService {
     private static final Pattern UPLOADS_REF = Pattern.compile("/uploads/([^\\s\"'<>()\\\\]+)");
     private static final String PDF_CONTENT_TYPE = "application/pdf";
     private static final String PDF_EXTENSION = ".pdf";
+    /** 역할 문자열에 ROLE_ 접두가 없다 (02 §0-3 — SecurityConfig 도 hasAuthority 로 건다). */
+    private static final String ADMIN_AUTHORITY = "ADMIN";
 
     private final FileRepository fileRepository;
     private final FileUtil fileUtil;
     private final StoredBytesDeleter storedBytesDeleter;
     private final CommunityRepository communityRepository;
     private final UserRepository userRepository;
+    private final EditionPreviewGate editionPreviewGate;
 
     /** orphan(미연결 임시) 파일 유예시간(시간). 이 시간이 지난 refId=0 파일만 배치가 정리한다(§5-3-1 ③). */
     @Value("${app.file.orphan-grace-hours:24}")
@@ -233,8 +238,9 @@ public class FileService {
      * 게이트를 태우고 다운로드 수·기록도 남긴다. 저장 파일명만 알면 되는 이 프록시가 같은 바이트를 내주면
      * 저작권 게이트가 통째로 우회되어 기획 §9-1 재배포 정책이 무의미해진다(qa 3차 실측).
      *
-     * <p>막는 것은 판본 <b>PDF</b> 뿐이다 — 미리보기 PNG(§0-4 {@code previewUrl})와 커뮤니티·프로필 파일은
-     * 그대로 서빙된다. <b>{@code files} 행이 없는 저장 파일명도 막는다</b> — 판본 삭제·고아 정리 실패로
+     * <p><b>판본 미리보기 PNG 는 판정이 {@code FREE} 인 것만 나간다</b>(§0-4 표, 2026-09-08 —
+     * {@link #isPreviewServable}). 커뮤니티·프로필 파일은 그대로 서빙된다.
+     * <b>{@code files} 행이 없는 저장 파일명도 막는다</b> — 판본 삭제·고아 정리 실패로
      * 업로드 폴더에 바이트만 남는 일이 실제로 있고, 행이 없으면 그 바이트가 무엇인지 우리가 알 수 없다.
      */
     public boolean isPubliclyServable(String storedFileName) {
@@ -242,8 +248,54 @@ public class FileService {
             return false;
         }
         return fileRepository.findFirstByStoredFileName(storedFileName)
-                .map(file -> !isEditionPdf(file))
+                .map(this::isServable)
                 .orElse(false);
+    }
+
+    private boolean isServable(FileEntity file) {
+        if (!isEditionScoped(file.getRefType())) {
+            return true;
+        }
+        if (isEditionPdf(file)) {
+            return false;
+        }
+        return isPreviewServable(file);
+    }
+
+    /**
+     * 판본 미리보기 PNG 의 노출 게이트 (02 §0-4 표, 2026-09-08 — qa 4차 결함 2).
+     *
+     * <p><b>비 FREE 판본의 미리보기는 비관리자에게 404</b> 다. 공개 응답에서 {@code previewUrl} 을 비우는 것만으로는
+     * 저장 파일명을 아는 사람에게 그대로 열려 있다 — 이름은 없어지지 않는다(판정이 뒤집힌 판본의 옛 응답·브라우저 기록,
+     * 서버의 {@code uploads/} 폴더). "우리 응답에 안 실렸으니 닫힌 것" 이라는 판단이 정확히 {@code /images} 사고였다.
+     *
+     * <p><b>ADMIN 은 통과한다</b> — 판정 근거가 미리보기 그 자체라(기획 §F6-4 (B)3), 판정 안 된 판본의 미리보기를
+     * 관리자에게 감추면 판정 자체가 불가능해진다. 관리 웹은 쿠키 인증이라 {@code <img src>} 에도 권한이 실린다.
+     *
+     * <p><b>아직 판본에 붙지 않은 업로드(refId 0)는 그대로 연다</b>(02 §5-1) — 판정할 대상 자체가 없고,
+     * 관리자가 판본을 저장하기 전에 폼에서 그 이미지를 보는 것이 업로드 응답의 용도다.
+     * 붙지 않은 채 유예시간이 지나면 orphan 배치가 지운다(컨벤션 §5-3-1 ③).
+     */
+    private boolean isPreviewServable(FileEntity preview) {
+        Long editionId = preview.getRefId();
+        if (editionId == null || editionId == 0L) {
+            return true;
+        }
+        return isAdmin() || editionPreviewGate.isPreviewOpenToPublic(editionId);
+    }
+
+    /**
+     * 요청자가 관리자인가 — 인가 판단은 서비스에 두고 컨트롤러는 얇게 유지한다(컨벤션 §1).
+     * {@code /uploads} 는 permitAll 이라 시큐리티가 걸러 주지 않지만, JWT 필터는 토큰·쿠키가 있으면
+     * 경로와 무관하게 인증을 채워 둔다.
+     */
+    private static boolean isAdmin() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> ADMIN_AUTHORITY.equals(authority.getAuthority()));
     }
 
     /** 판본 PDF 판정 — 미리보기 PNG(THUMBNAIL)와 갈라야 하므로 용도·Content-Type·확장자를 함께 본다. */

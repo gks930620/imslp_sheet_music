@@ -60,8 +60,6 @@ public class WorkDtoAssembler {
             EditionEntity recommended = work.getRecommendedEdition();
             FileEntity pdf = recommended == null || recommended.getPdfFileId() == null
                     ? null : files.get(recommended.getPdfFileId());
-            FileEntity preview = recommended == null || recommended.getPreviewFileId() == null
-                    ? null : files.get(recommended.getPreviewFileId());
             List<WorkCatalogNumberEntity> workCatalogs = catalogs.getOrDefault(work.getId(), List.of());
             result.add(WorkSummaryDTO.builder()
                     .id(work.getId())
@@ -73,7 +71,9 @@ public class WorkDtoAssembler {
                     .status(work.status())
                     .pageCount(recommended == null ? null : recommended.getPageCount())
                     .fileSize(pdf == null ? null : pdf.getFileSize())
-                    .previewUrl(preview == null ? null : preview.getFilePath())
+                    // 곡 카드의 미리보기는 추천 판본의 첫 페이지이고 판정 규칙도 판본과 같다 (02 §2-2 · §2-3).
+                    .previewUrl(recommended == null
+                            ? null : editionDtoAssembler.publicPreviewUrl(recommended, files))
                     .matchedAlias(matchedAlias(work, aliases.getOrDefault(work.getId(), List.of()),
                             workCatalogs, composerAliases.getOrDefault(work.getComposer().getId(), List.of()),
                             terms, wholeTerm))

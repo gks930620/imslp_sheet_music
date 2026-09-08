@@ -6,6 +6,7 @@ import com.test.test.integration.support.FakeImslpClient;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -241,7 +242,11 @@ class CrawlApiIntegrationTest extends CrawlTestSupport {
         assertThat(top.path("fileFetchedAt").isTextual()).isTrue();
         assertThat(work.path("candidateEditionId").asLong()).isEqualTo(top.path("id").asLong());
         assertThat(work.path("editions").get(0).path("id").asLong()).isEqualTo(top.path("id").asLong());   // 후보가 맨 앞
-        mockMvc.perform(get(top.path("previewUrl").asText())).andExpect(status().isOk());
+        // 받아온 미리보기 바이트가 살아 있는지만 본다. 수집 판본은 UNKNOWN 이라 §0-4(2026-09-08)에서
+        // 비로그인 미리보기는 404 이므로 ADMIN 으로 묻는다 — 게이트는 EditionPreviewExposureIntegrationTest 담당.
+        mockMvc.perform(get(top.path("previewUrl").asText())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(admin.accessToken())))
+                .andExpect(status().isOk());
 
         JsonNode schenker = editionByImslpFileId(work, "00014");
         assertThat(schenker.path("hasFile").asBoolean()).isTrue();

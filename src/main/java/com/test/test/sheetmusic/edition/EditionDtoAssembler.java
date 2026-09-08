@@ -56,7 +56,7 @@ public class EditionDtoAssembler {
                 .pageCount(edition.getPageCount())
                 .fileSize(fileSize)
                 .hasFile(edition.hasFile())
-                .previewUrl(previewUrl(edition, files))
+                .previewUrl(publicPreviewUrl(edition, files))
                 .publisher(edition.getPublisher())
                 .publishYear(edition.getPublishYear())
                 .plateNumber(edition.getPlateNumber())
@@ -126,6 +126,19 @@ public class EditionDtoAssembler {
     private Long fileSize(EditionEntity edition, Map<Long, FileEntity> files) {
         FileEntity pdf = edition.getPdfFileId() == null ? null : files.get(edition.getPdfFileId());
         return pdf == null ? null : pdf.getFileSize();
+    }
+
+    /**
+     * 공개 응답의 미리보기 (02 §2-3 · §0-4, 2026-09-08 / 기획 §F3-6) — <b>판정이 FREE 인 판본만</b> 값이 있다.
+     *
+     * <p>다운로드를 막는 이유는 1쪽 이미지에도 그대로 적용된다. {@code previewUrl == null} 의 두 이유(파일 없음 ·
+     * 판정 안 끝남)는 화면이 {@code koreaCopyright} 로 가르므로 별도 필드를 두지 않는다.
+     * 관리 응답({@link #toAdminDto})은 판정과 무관하게 그대로다 — 판정 근거가 미리보기 그 자체이기 때문이다(기획 §F6-4).
+     * 응답만 막으면 저장 파일명을 아는 사람에게는 열려 있으므로 서빙 게이트가 함께 간다
+     * ({@code FileService.isPubliclyServable} — 02 §0-4 표).
+     */
+    public String publicPreviewUrl(EditionEntity edition, Map<Long, FileEntity> files) {
+        return edition.getKoreaCopyright() == KoreaCopyright.FREE ? previewUrl(edition, files) : null;
     }
 
     private String previewUrl(EditionEntity edition, Map<Long, FileEntity> files) {

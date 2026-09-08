@@ -12,6 +12,12 @@ import { useApiResource } from "../../hooks/useApiResource.js";
 import { authFetch, callPublicApi } from "../../lib/http.js";
 import { formatEditionKind, formatEditionScope, formatFileSizeCompact } from "../../lib/format.js";
 
+/**
+ * 기획 §F3-6 · §5 예외표 — previewUrl 이 없는 이유가 "파일이 없다" 가 아니라 "판정이 안 끝났다" 일 때의 문구.
+ * 판단 근거는 koreaCopyright 하나다(02 §2-3 — 이유를 알려주는 별도 필드는 두지 않는다).
+ */
+const PREVIEW_HIDDEN_BY_COPYRIGHT = "저작권을 확인하는 중이라 미리보기도 아직 보여드릴 수 없어요";
+
 function editionInfoLine(edition) {
   return [
     edition.publisher,
@@ -38,6 +44,8 @@ export function WorkDetailPage() {
   const restricted = Boolean(recommended) && !preparing && recommended.koreaCopyright === "RESTRICTED";
   const canDownload = Boolean(recommended) && !preparing && recommended.downloadable && Boolean(recommended.downloadUrl);
   const hasFreeOther = Boolean(work) && !canDownload && (work.downloadableOtherCount ?? 0) > 0;
+  // 미리보기는 "한국에서 자유 이용 가능" 판본만 보여준다 (기획 §F3-6). 판본 줄에서는 반복하지 않는다 — 같은 줄의 뱃지가 이미 말한다
+  const previewHiddenByCopyright = Boolean(recommended) && recommended.koreaCopyright !== "FREE";
 
   // 추천이 제한·확인 중인데 바로 받을 수 있는 다른 판본이 있으면 자동 펼침 (03 상태별 UI).
   // effect 로 미루지 않고 파생 상태로 둬야 첫 렌더에 바로 펼쳐진다.
@@ -149,7 +157,7 @@ export function WorkDetailPage() {
                 ) : (
                   <div className="edition-card-preview-empty">
                     <span className="material-icons">image_not_supported</span>
-                    <p>미리보기 준비 중</p>
+                    <p>{previewHiddenByCopyright ? PREVIEW_HIDDEN_BY_COPYRIGHT : "미리보기 준비 중"}</p>
                   </div>
                 )}
               </div>
