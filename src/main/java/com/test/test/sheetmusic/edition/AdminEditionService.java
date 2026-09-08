@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +51,7 @@ public class AdminEditionService {
     private final EditionFileService editionFileService;
     private final EditionDtoAssembler editionDtoAssembler;
     private final EditionFileFetcher editionFileFetcher;
+    private final CopyrightAutoJudgeService copyrightAutoJudgeService;
     private final TransactionTemplate transactionTemplate;
 
     // ===== §5-2 / §5-3 저장 =====
@@ -90,6 +92,8 @@ public class AdminEditionService {
                 .scanner(request.getScanner())
                 .imslpFileUrl(request.getImslpFileUrl())
                 .imslpCopyrightText(request.getImslpCopyrightText())
+                // 요청 필드가 아니라 서버가 원문에서 도출한다(02 §5-2) — 수집·수기 판본이 같은 값을 갖게.
+                .imslpLicenseCode(LicenseCode.fromText(request.getImslpCopyrightText()))
                 .pageCount(pageCount)
                 .koreaCopyright(request.getKoreaCopyright())
                 .copyrightNote(request.getCopyrightNote())
@@ -152,10 +156,12 @@ public class AdminEditionService {
             pageCount = edition.getPageCount();
         }
 
+        // 마지막 인자 = admin_edited_at (01_ERD §3-6): 이 저장 이후 재수집이 관리자 편집 필드를 덮지 않는다(02 §6-12).
         edition.updateFromAdmin(request.getKind(), request.getScope(), request.getMovementNumber(), pageCount,
                 request.getPublisher(), request.getPublishYear(), request.getPlateNumber(), request.getEditor(),
                 request.getArranger(), request.getScanner(), request.getImslpFileUrl(),
-                request.getImslpCopyrightText(), request.getCcLicenseName(), request.getCcAttribution());
+                request.getImslpCopyrightText(), request.getCcLicenseName(), request.getCcAttribution(),
+                Instant.now());
         edition.applyCopyrightOnSave(request.getKoreaCopyright(), request.getCopyrightNote(), username, Instant.now());
 
         if (fileChanged) {
@@ -171,8 +177,12 @@ public class AdminEditionService {
             editionRepository.flush();
             editionFileService.deleteFiles(Arrays.asList(oldPdfFileId, oldPreviewFileId));
         } else if (!Objects.equals(oldPreviewFileId, request.getPreviewFileId())) {
+            // 미리보기만 바뀌는 경로 — 옛 미리보기 행도 함께 지운다. 남기면 ref_id = 판본 id 라
+            // orphan 배치(§5-3-1 ③ — ref_id = 0 만 본다)가 못 지워 바이트가 영구히 남는다.
             edition.changeFiles(request.getFileId(), request.getPreviewFileId());
             editionFileService.linkToEdition(edition.getId(), request.getFileId(), request.getPreviewFileId());
+            editionRepository.flush();
+            editionFileService.deleteFiles(Arrays.asList(oldPreviewFileId));
         }
 
         return toDetailDto(edition, work);
@@ -195,7 +205,16 @@ public class AdminEditionService {
         removeEditions(work, List.of(edition));
     }
 
-    /** 곡 삭제(§4-9)·판본 삭제(§5-5) 공통 — 추천 해제 → 다운로드 기록 → 파일 → 판본 (01_ERD §7). */
+    /**
+     * 곡 삭제(§4-9)·판본 삭제(§5-5) 공통 — 추천 해제 → 파일 → 판본 (01_ERD §7).
+     *
+     * <p><b>다운로드 기록은 지우지 않고 판본 참조만 끊는다</b> (02 §5-5, 2026-09-08 확정).
+     * {@code download_log} 가 원장(사실)이고 {@code work.download_count} 는 그 합계 캐시인데, 판본을 지울 때
+     * 로그만 지우면 둘이 어긋난다 — 인기곡 정렬(§3-2, 합계)과 대시보드 {@code monthlyDownloads}(§4-1, 로그 수)가
+     * 같은 달의 같은 사건을 다르게 세고 이번 달 수치가 나중에 <b>줄어든다</b>. 사용자가 받은 것은 "곡" 이지
+     * "판본 파일" 이 아니다. 다만 사라진 판본을 계속 가리키면 매달린 참조라 {@code edition_id} 는 NULL 로 비운다.
+     * 곡을 지울 때는 {@code AdminWorkService} 가 {@code work_id} 로 로그를 함께 지운다(§4-9).
+     */
     @Transactional
     public void removeEditions(WorkEntity work, List<EditionEntity> editions) {
         if (editions.isEmpty()) {
@@ -207,7 +226,7 @@ public class AdminEditionService {
             work.clearRecommendation();
             workRepository.flush();
         }
-        downloadLogRepository.deleteByEditionIds(editionIds);
+        downloadLogRepository.detachEditions(editionIds);
 
         List<Long> fileIds = new ArrayList<>();
         for (EditionEntity edition : editions) {
@@ -238,7 +257,7 @@ public class AdminEditionService {
                 .previousEditionId(previous)
                 .editionId(editionId)
                 .workStatus(work.status())
-                .warning(edition.getKoreaCopyright() == KoreaCopyright.FREE ? null : "NOT_DOWNLOADABLE")
+                .warnings(edition.recommendWarnings())
                 .build();
     }
 
@@ -312,6 +331,8 @@ public class AdminEditionService {
                     .imslpCopyrightText(edition.getImslpCopyrightText())
                     .imslpFileUrl(edition.getImslpFileUrl())
                     .hasFile(edition.hasFile())
+                    // §5-11 과 같은 판정 함수를 쓴다 — 대기함 표시와 실제 실행 결과가 어긋날 수 없다.
+                    .autoJudgeSkipReason(copyrightAutoJudgeService.skipReasonOf(edition))
                     .build());
         }
         return CopyrightDTOs.PendingListResult.builder()
@@ -369,18 +390,29 @@ public class AdminEditionService {
                 .orElseThrow(() -> EntityNotFoundException.of("판본", editionId));
     }
 
+    /**
+     * 판본 1건 응답 조립. <b>그 곡의 판본을 전량 읽지 않는다</b> — 판정·저장 한 번마다 70개를 읽으면
+     * 대기함에서 수백 번 반복된다(03 §16-1). 후보는 같은 규칙의 쿼리 1건으로 뽑는다.
+     */
     private AdminEditionDTO toDetailDto(EditionEntity edition, WorkEntity work) {
-        List<EditionEntity> editions = editionRepository.findByWorkIdOrderByIdAsc(work.getId());
-        if (editions.stream().noneMatch(e -> e.getId().equals(edition.getId()))) {
-            editions = new ArrayList<>(editions);
-            editions.add(edition);
-        }
         Long recommendedId = work.getRecommendedEdition() == null ? null : work.getRecommendedEdition().getId();
-        Long candidateId = EditionDtoAssembler.candidateOf(editions, recommendedId);
+        Long candidateId = candidateOf(work.getId(), recommendedId);
         Map<Long, FileEntity> files = editionDtoAssembler.loadFiles(List.of(edition));
         AdminEditionDTO dto = editionDtoAssembler.toAdminDto(edition, files, recommendedId, candidateId);
         dto.setWorkContext(work.getId(), work.status());
         return dto;
+    }
+
+    /**
+     * 추천 후보 (01_ERD §3-3): 전체 악보·전곡·파일 있음 중 IMSLP 다운로드 수 최대(동률이면 id 최소).
+     * 추천이 이미 있으면 후보를 표시하지 않는다 — {@link EditionDtoAssembler#candidateOf} 와 같은 규칙이다.
+     */
+    private Long candidateOf(Long workId, Long recommendedEditionId) {
+        if (recommendedEditionId != null) {
+            return null;
+        }
+        List<EditionEntity> best = editionRepository.findCandidates(workId, PageRequest.of(0, 1));
+        return best.isEmpty() ? null : best.get(0).getId();
     }
 
     private void validate(EditionSaveDTO request) {

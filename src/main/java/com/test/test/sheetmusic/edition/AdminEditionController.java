@@ -4,6 +4,7 @@ import com.test.test.common.dto.ApiResponse;
 import com.test.test.jwt.model.CustomUserAccount;
 import com.test.test.sheetmusic.common.AdminPageRequests;
 import com.test.test.sheetmusic.edition.dto.AdminEditionDTO;
+import com.test.test.sheetmusic.edition.dto.AutoJudgeDTOs;
 import com.test.test.sheetmusic.edition.dto.CopyrightDTOs;
 import com.test.test.sheetmusic.edition.dto.EditionFileUploadDTO;
 import com.test.test.sheetmusic.edition.dto.EditionSaveDTO;
@@ -32,6 +33,7 @@ public class AdminEditionController {
 
     private final AdminEditionService adminEditionService;
     private final EditionFileService editionFileService;
+    private final CopyrightAutoJudgeService copyrightAutoJudgeService;
 
     // ===== §5-1 업로드 =====
 
@@ -108,6 +110,22 @@ public class AdminEditionController {
             @Valid @RequestBody CopyrightDTOs.JudgeRequest request,
             @AuthenticationPrincipal CustomUserAccount account) {
         return ResponseEntity.ok(ApiResponse.success(adminEditionService.judge(id, request, username(account))));
+    }
+
+    // ===== §5-11 / §5-12 자동 판정 =====
+
+    /** 본문은 생략 가능하다 — 없으면 {@code dryRun=false, assignRecommended=true} 기본값으로 돈다. */
+    @PostMapping("/copyright/auto-judge")
+    public ResponseEntity<ApiResponse<AutoJudgeDTOs.AutoJudgeResult>> autoJudge(
+            @RequestBody(required = false) AutoJudgeDTOs.AutoJudgeRequest request) {
+        AutoJudgeDTOs.AutoJudgeRequest resolved =
+                request == null ? new AutoJudgeDTOs.AutoJudgeRequest() : request;
+        return ResponseEntity.ok(ApiResponse.success(copyrightAutoJudgeService.autoJudge(resolved)));
+    }
+
+    @PostMapping("/copyright/auto-judge/undo")
+    public ResponseEntity<ApiResponse<AutoJudgeDTOs.UndoResult>> undoAutoJudge() {
+        return ResponseEntity.ok(ApiResponse.success(copyrightAutoJudgeService.undo()));
     }
 
     @PostMapping("/editions/copyright/bulk")

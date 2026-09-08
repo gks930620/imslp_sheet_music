@@ -141,7 +141,7 @@ class AdminEditionApiIntegrationTest extends AdminApiTestSupport {
         assertThat(data.path("pdfFileId").asLong()).isEqualTo(fileId);
         assertThat(data.path("previewFileId").asLong()).isEqualTo(previewFileId);
         assertThat(data.path("imslpFileId").isNull()).isTrue();
-        assertThat(data.path("imslpLicenseCode").isNull()).isTrue();
+        assertThat(data.path("imslpLicenseCode").asText()).isEqualTo("PD");   // 서버가 imslpCopyrightText 에서 도출 (§5-2)
         assertThat(data.path("copyrightNote").isNull()).isTrue();
         assertThat(data.path("fileFetchStatus").isNull()).isTrue();
         assertThat(data.path("fileFetchError").isNull()).isTrue();
@@ -373,7 +373,9 @@ class AdminEditionApiIntegrationTest extends AdminApiTestSupport {
                 .andExpect(jsonPath("$.data.previousEditionId").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.editionId").value(unknownEdition))
                 .andExpect(jsonPath("$.data.workStatus").value("UNKNOWN"))
-                .andExpect(jsonPath("$.data.warning").value("NOT_DOWNLOADABLE"));
+                // 경고는 배열이다 (§5-6, 2026-09-08 개정) — 세부 조합은 RecommendEditionWarningIntegrationTest
+                .andExpect(jsonPath("$.data.warnings").value(org.hamcrest.Matchers.contains("NOT_DOWNLOADABLE")))
+                .andExpect(jsonPath("$.data.warning").doesNotExist());
 
         long freeEdition = createFileEdition(admin, workId, "FREE", "근거");
         adminPut(admin, "/api/admin/works/{workId}/recommended-edition", json("editionId", freeEdition), workId)
@@ -381,7 +383,9 @@ class AdminEditionApiIntegrationTest extends AdminApiTestSupport {
                 .andExpect(jsonPath("$.data.previousEditionId").value(unknownEdition))
                 .andExpect(jsonPath("$.data.editionId").value(freeEdition))
                 .andExpect(jsonPath("$.data.workStatus").value("READY"))
-                .andExpect(jsonPath("$.data.warning").value(org.hamcrest.Matchers.nullValue()));
+                .andExpect(jsonPath("$.data.warnings").isArray())
+                .andExpect(jsonPath("$.data.warnings").isEmpty())
+                .andExpect(jsonPath("$.data.warning").doesNotExist());
 
         JsonNode work = getWork(admin, workId);
         assertThat(work.path("recommendedEditionId").asLong()).isEqualTo(freeEdition);

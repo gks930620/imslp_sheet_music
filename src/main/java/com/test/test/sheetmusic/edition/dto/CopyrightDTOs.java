@@ -91,7 +91,11 @@ public final class CopyrightDTOs {
         private Long previousEditionId;
         private Long editionId;
         private com.test.test.sheetmusic.work.WorkStatus workStatus;
-        private String warning;
+        /**
+         * 해당되는 경고가 <b>전부</b> 고정 순서로 온다. 없으면 빈 배열이고 <b>null 이 아니다</b> (02 §5-6, 2026-09-08).
+         * 옛 단수 필드 {@code warning} 은 삭제했다 — 같은 뜻의 필드를 둘 두면 화면마다 다른 걸 읽는다.
+         */
+        private java.util.List<com.test.test.sheetmusic.edition.RecommendWarning> warnings;
     }
 
     /** §5-7 파일 받아오기 응답. */
@@ -123,6 +127,13 @@ public final class CopyrightDTOs {
         private String imslpCopyrightText;
         private String imslpFileUrl;
         private boolean hasFile;
+
+        /**
+         * 지금 §5-11 자동 판정을 돌리면 이 판본이 <b>왜 자동으로 열리지 않는지</b>.
+         * 자동으로 FREE 가 될 수 있으면 {@code null}. 관리자가 남은 일감의 종류를 목록에서 바로 보는 값이다.
+         * 계산만 하고 아무것도 바꾸지 않는다.
+         */
+        private com.test.test.sheetmusic.edition.CopyrightAutoJudge.SkipReason autoJudgeSkipReason;
 
         @Getter
         @Builder
