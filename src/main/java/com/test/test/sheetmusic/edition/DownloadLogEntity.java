@@ -27,7 +27,11 @@ public class DownloadLogEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "edition_id", nullable = false)
+    /**
+     * 다운로드된 판본. <b>판본이 지워지면 NULL</b> 이 된다 (01_ERD §3-7, 02 §5-5) — 로그 자체는 곡의 사실이라
+     * 남기고, 사라진 판본을 계속 가리키는 매달린 참조만 끊는다.
+     */
+    @Column(name = "edition_id")
     private Long editionId;
 
     @Column(name = "work_id", nullable = false)

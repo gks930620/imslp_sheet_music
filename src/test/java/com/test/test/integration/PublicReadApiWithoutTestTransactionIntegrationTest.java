@@ -105,7 +105,10 @@ class PublicReadApiWithoutTestTransactionIntegrationTest extends NonTransactiona
     void workPopular_worksWithoutOpenSession() throws Exception {
         Tokens admin = loginAdmin();
         long composerId = createComposer(admin, "비트랜잭션작곡가", "Nontx, Composer");
-        createWork(admin, composerId, "비트랜잭션 인기곡", "Nontx Popular");
+        // §3-2(2026-09-08 개정): 자격은 READY + title_ko — 추천 판본 없는 PREPARING 곡만 있으면 빈 배열이라
+        // 지연 로딩 직렬화를 볼 수 있는 행 자체가 생기지 않는다
+        createWorkWithRecommendedEdition(admin, composerId, "비트랜잭션 인기곡", "Nontx Popular",
+                List.of("Op.3"), List.of(), "INTERMEDIATE", 2, "FREE");
 
         mockMvc.perform(get("/api/works/popular").param("limit", "5"))
                 .andExpect(status().isOk())

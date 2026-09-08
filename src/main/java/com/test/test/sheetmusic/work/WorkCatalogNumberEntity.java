@@ -41,7 +41,11 @@ public class WorkCatalogNumberEntity {
     @Column(name = "catalog_value_normalized", length = 100, nullable = false)
     private String catalogValueNormalized;
 
-    @Column(name = "sort_key", length = 120, nullable = false)
+    /**
+     * 파생 정렬 키 (01_ERD §3-5). 원문 100자의 최대 팽창은 350자(1자리 숫자 50개 × 6자 패딩 + 구분 문자 50자)이고,
+     * 600 은 거기에 여유를 둔 컬럼 폭이다 — 파생값이 저장을 깨뜨리면 안 된다.
+     */
+    @Column(name = "sort_key", length = 600, nullable = false)
     private String sortKey;
 
     @Column(name = "sort_order", nullable = false)

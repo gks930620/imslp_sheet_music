@@ -11,6 +11,11 @@ package com.test.test.sheetmusic.common;
 public final class CatalogSortKey {
 
     private static final int PAD_WIDTH = 6;
+    /**
+     * {@code work_catalog_number.sort_key} 컬럼 폭 (01_ERD §3-5). 원문 100자의 최대 팽창은 350자
+     * (1자리 숫자 50개 × 6자 패딩 + 구분 문자 50자)이고, 600 은 거기에 여유를 둔 값이다.
+     */
+    private static final int MAX_LENGTH = 600;
 
     private CatalogSortKey() {
     }
@@ -32,7 +37,9 @@ public final class CatalogSortKey {
             String chunk = catalogValue.substring(start, i);
             key.append(digitRun ? pad(chunk) : SearchNormalizer.normalize(chunk));
         }
-        return key.toString();
+        // 파생값이 저장을 깨뜨리면 안 된다 (01_ERD §3-5) — 넘치면 자른다.
+        // 잘린 키는 그 뒤 구간의 정렬 순서가 뭉개질 뿐이고, 원문(catalog_value)은 그대로 남는다.
+        return key.length() <= MAX_LENGTH ? key.toString() : key.substring(0, MAX_LENGTH);
     }
 
     /** 6자리 0-패딩. 6자리를 넘는 숫자는 자르지 않고 그대로 둔다. */

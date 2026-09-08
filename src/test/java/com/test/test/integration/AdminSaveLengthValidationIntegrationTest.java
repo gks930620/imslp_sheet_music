@@ -106,6 +106,40 @@ class AdminSaveLengthValidationIntegrationTest extends AdminApiTestSupport {
                 .andExpect(jsonPath("$.errors[*].field", hasItem(startsWith("aliases"))));
     }
 
+    /**
+     * <b>파생 컬럼이 원문보다 길어져 저장이 깨진다</b> — 2026-09-08 senior-dev, 결함 6 테스트 중 발견.
+     *
+     * <p>{@code catalogNumbers} 항목 상한은 100자(§0-6)인데, 정렬용 파생값
+     * {@code work_catalog_number.sort_key}(01_ERD §3-5)는 숫자 구간을 <b>6자리로 0-패딩</b>한다.
+     * {@code "Op.1 Op.1 …"} 처럼 짧은 숫자가 많은 값이면 100자 원문이 350자로 부풀어
+     * {@code VARCHAR(120)} 을 넘고, 검증을 통과한 <b>정상 입력이 500</b> 이 된다(qa 결함 D3 와 같은 모양).
+     *
+     * <p>계약(01_ERD §3-5 개정): <b>{@code sort_key} 는 파생값이므로 저장을 깨뜨리면 안 된다.</b>
+     * 컬럼을 {@code VARCHAR(600)} 으로 넓히고(100자 원문의 최대 팽창 350자 + 여유),
+     * 그래도 넘치면 <b>잘라서 쓴다</b> — 잘린 정렬 키는 정렬 순서가 뭉개질 뿐 데이터는 잃지 않는다.
+     * 반대로 원문 상한을 sort_key 에 맞춰 줄이는 방향은 버린다: 사용자에게 보이는 상한이
+     * 내부 정렬 구현 때문에 달라지는 셈이라 설명할 수 없다.
+     */
+    @Test
+    @DisplayName("곡: catalogNumbers 항목 100자 초과 → 400 field catalogNumbers (경계값 100자는 201 — 파생 sort_key 가 넘쳐 500 이 되면 안 된다)")
+    void work_catalogNumber_maxLength_andDerivedSortKeyDoesNotOverflow() throws Exception {
+        Tokens admin = loginAdmin();
+        long composerId = createComposer(admin);
+
+        Map<String, Object> tooLong = workBody(composerId, "작품번호 길이", "Zz Catalog Too Long " + uniq());
+        tooLong.put("catalogNumbers", List.of(ascii(101)));
+        adminPost(admin, "/api/admin/works", tooLong)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.errors[*].field", hasItem(startsWith("catalogNumbers"))));
+
+        // 숫자가 많아 sort_key 팽창이 큰 99자: "Op.1" 20번 → 정규화 op1…op1 → 패딩 op000001 20개 = 160자
+        Map<String, Object> boundary = workBody(composerId, "작품번호 경계", "Zz Catalog Boundary " + uniq());
+        boundary.put("catalogNumbers", List.of("Op.1 ".repeat(20).trim()));
+        adminPost(admin, "/api/admin/works", boundary)
+                .andExpect(status().isCreated());
+    }
+
     // ===== §5-2 / §5-9 판본·판정 =====
 
     @Test

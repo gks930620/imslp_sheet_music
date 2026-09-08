@@ -96,6 +96,45 @@ class HttpStandardErrorContractIntegrationTest extends AdminApiTestSupport {
                 .andExpect(jsonPath("$.errorCode").value("METHOD_NOT_ALLOWED"));
     }
 
+    /**
+     * <b>인가가 라우팅보다 먼저다 — 비로그인은 405 가 아니라 401 이다</b> (02 §0-2·§0-3, 2026-09-08 판정, qa 3차 결함 7).
+     *
+     * <p>계약이 부딪히는 자리였다: §0-2 의 405 행이 든 예시가 하필 <b>공개 리소스</b>({@code DELETE /api/works/21}) 인데,
+     * 실제로는 비로그인이면 401(+{@code Allow} 없음)이 나가고 토큰이 있어야 405 가 나간다.
+     * <b>§0-3 이 우선</b>이라고 판정했다. 근거:
+     * <ul>
+     *   <li>405 를 만들려면 {@code HandlerMapping} 까지 가야 하는데, 그건 시큐리티 필터<b>보다 뒤</b>다.
+     *       비로그인에게 405 를 주려면 공개 경로를 <b>메서드 무관 permitAll</b> 로 열어야 하고, 그러면
+     *       나중에 {@code /api/works/**} 아래에 쓰기 매핑이 하나라도 생기는 순간 그게 공개된다.
+     *       <b>실재하는 안전장치를 상태코드 하나와 바꾸지 않는다.</b></li>
+     *   <li>§0-3 은 이미 "인증 전에는 어떤 API 가 있는지 알려주지 않는다" 를 계약으로 정했다.
+     *       <b>메서드도 API 모양의 일부</b>다.</li>
+     *   <li>호출자 손해가 없다 — 둘 다 4xx 이고, 401 을 받아 로그인해도 그 요청은 여전히 405 다.</li>
+     * </ul>
+     * 그래서 §0-2 의 405 행은 <b>인가를 통과한 요청</b>에 대한 계약으로 읽는다. 이 테스트는 그 경계를 잠근다
+     * (Red 가 아니라 green→green 잠금 — 고칠 것은 코드가 아니라 계약 문서였다).
+     */
+    @Test
+    @DisplayName("비로그인이 공개 경로에 DELETE → 401 NOT_AUTHENTICATED (Allow 없음), 같은 요청이 토큰과 함께면 405")
+    void anonymous_write_method_on_public_path_returns_401_not_405() throws Exception {
+        mockMvc.perform(delete("/api/works/{id}", 21L))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.errorCode").value("NOT_AUTHENTICATED"))
+                .andExpect(header().doesNotExist(HttpHeaders.ALLOW));
+
+        // 없는 API 경로와 같은 취급이다 (§0-3) — 인증 전에는 API 모양을 알려주지 않는다
+        mockMvc.perform(delete("/api/works/{id}/no-such-thing", 21L))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("NOT_AUTHENTICATED"));
+
+        // 인가를 통과하면 그때 405 + Allow (§0-2)
+        mockMvc.perform(delete("/api/works/{id}", 21L)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(loginAdmin().accessToken())))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(header().string(HttpHeaders.ALLOW, containsString("GET")));
+    }
+
     @Test
     @DisplayName("공개 작곡가 API: PUT → 405 METHOD_NOT_ALLOWED")
     void unsupported_method_on_public_composer_api_returns_405() throws Exception {
