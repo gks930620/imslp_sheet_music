@@ -132,6 +132,15 @@ export function WorkDetailPage() {
           <p className="work-detail-aliases">{`이렇게도 불러요: ${work.aliases.join(", ")}`}</p>
         ) : null}
         {factLine ? <p className="work-detail-facts">{factLine}</p> : null}
+        {/* 수록곡 안내 (기획 §F3-2 · §10-3, 02 §3-3) — 서버가 준 완성 문장 그대로 한 줄. 공백이면 줄 생략 */}
+        {work.collectionGuide?.trim() ? (
+          <p className="work-detail-collection">
+            <span className="material-icons" aria-hidden="true">
+              library_music
+            </span>
+            {work.collectionGuide}
+          </p>
+        ) : null}
         {work.movementPageGuide && recommended ? (
           <p className="work-detail-guide">
             <span className="material-icons" aria-hidden="true">

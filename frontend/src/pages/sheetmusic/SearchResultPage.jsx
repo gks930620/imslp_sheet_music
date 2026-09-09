@@ -7,6 +7,7 @@ import { EmptyState } from "../../components/common/EmptyState.jsx";
 import { ErrorState } from "../../components/common/ErrorState.jsx";
 import { useApiResource } from "../../hooks/useApiResource.js";
 import { callPublicApi } from "../../lib/http.js";
+import { imslpSearchUrl } from "../../lib/imslp.js";
 import { applyWorkFilters, buildWorkQuery, readWorkFilters, withPage } from "../../lib/workQuery.js";
 
 const MAX_COMPOSER_CARDS = 3;
@@ -118,6 +119,20 @@ export function SearchResultPage() {
                     <p>다른 이름으로 불리기도 해요 — 예: 월광 / Moonlight / Op.27 No.2</p>
                     <p>작곡가 이름으로 찾아보세요</p>
                     <p>1차는 피아노 독주곡만 있어요</p>
+                    {/* 기획 §10-7 — 0건이 "없어요" 가 아니라 "우리가 일부러 뺐어요" 인 경우가 많다. 원본으로 안내한다 */}
+                    {imslpSearchUrl(data.q ?? q) ? (
+                      <a
+                        className="btn btn-outline"
+                        href={imslpSearchUrl(data.q ?? q)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        IMSLP 에서 직접 찾아보기
+                        <span className="material-icons" aria-hidden="true">
+                          open_in_new
+                        </span>
+                      </a>
+                    ) : null}
                     <Link className="btn btn-outline" to="/composers">
                       작곡가 목록 보기
                     </Link>

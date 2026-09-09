@@ -20,6 +20,7 @@ const EMPTY_FORM = {
   musicalKey: "",
   movements: "",
   movementPageGuide: "",
+  collectionGuide: "",
   imslpUrl: "",
   hidden: false,
 };
@@ -55,6 +56,7 @@ function formFromDetail(detail) {
     musicalKey: detail.musicalKey ?? "",
     movements: detail.movements ?? "",
     movementPageGuide: detail.movementPageGuide ?? "",
+    collectionGuide: detail.collectionGuide ?? "",
     imslpUrl: detail.imslpUrl ?? "",
     hidden: Boolean(detail.hidden),
   };
@@ -194,6 +196,7 @@ export function WorkFormPage() {
     musicalKey: form.musicalKey.trim() || null,
     movements: form.movements.trim() || null,
     movementPageGuide: form.movementPageGuide.trim() || null,
+    collectionGuide: form.collectionGuide.trim() || null,
     imslpUrl: form.imslpUrl.trim() || null,
     hidden: form.hidden,
     ...overrides,
@@ -534,6 +537,19 @@ export function WorkFormPage() {
                 onChange={(event) => setField("movementPageGuide", event.target.value)}
               />
               <span className="form-help">{MOVEMENT_GUIDE_HELP}</span>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="collectionGuide">
+                수록곡 안내
+              </label>
+              <textarea
+                id="collectionGuide"
+                className="form-textarea"
+                rows={3}
+                value={form.collectionGuide}
+                onChange={(event) => setField("collectionGuide", event.target.value)}
+              />
             </div>
 
             <div className="form-group">

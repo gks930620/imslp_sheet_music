@@ -133,6 +133,67 @@ describe("WorkCard — 받게 되는 악보의 범위 한 줄 (02 §2-2-1 scopeN
   });
 });
 
+// 02 §2-2-1 "COLLECTION 의 두 번째 쓰임", 기획 §12-2.
+// 묶음 악보의 난이도·쪽수는 곡 하나가 아니라 묶음 전체의 값이다. 그대로 두면 '달빛'을 찾은 레슨생이
+// '고급 · 62쪽'(= 모음곡 4곡)을 보고 못 치는 곡이라 판단하고 창을 닫는다. 실제 달빛 단독은 중급이다.
+describe("WorkCard — 묶음 악보의 '(전곡 기준)' (02 §2-2-1, 기획 §12-2)", () => {
+  const tagsRow = () => document.querySelector(".work-card-tags");
+
+  it("묶음 악보면 난이도·쪽수 줄에 '(전곡 기준)' 이 붙는다", () => {
+    renderWithProviders(
+      <WorkCard work={workSummary({ level: "ADVANCED", pageCount: 62, scopeNote: scopeNote(["COLLECTION"]) })} />,
+    );
+    expect(tagsRow().textContent).toContain("고급");
+    expect(tagsRow().textContent).toContain("62쪽");
+    expect(tagsRow().textContent).toContain("(전곡 기준)");
+  });
+
+  it("난이도와 쪽수가 같은 줄이므로 '(전곡 기준)' 은 한 번만 쓴다", () => {
+    renderWithProviders(
+      <WorkCard work={workSummary({ level: "ADVANCED", pageCount: 62, scopeNote: scopeNote(["COLLECTION"]) })} />,
+    );
+    expect(screen.getAllByText("(전곡 기준)")).toHaveLength(1);
+  });
+
+  it("쪽수가 없어도 난이도에 걸린다 (추천 판본이 없는 묶음 곡)", () => {
+    renderWithProviders(
+      <WorkCard
+        work={workSummary({
+          level: "ADVANCED",
+          pageCount: null,
+          fileSize: null,
+          previewUrl: null,
+          scopeNote: scopeNote(["COLLECTION"]),
+        })}
+      />,
+    );
+    expect(tagsRow().textContent).toContain("(전곡 기준)");
+  });
+
+  it("작곡가 상세(hideAlias)에서도 검색 결과와 같게 붙는다", () => {
+    renderWithProviders(
+      <WorkCard
+        work={workSummary({ level: "ADVANCED", pageCount: 62, scopeNote: scopeNote(["COLLECTION"]) })}
+        hideComposer
+        hideAlias
+      />,
+    );
+    expect(tagsRow().textContent).toContain("(전곡 기준)");
+  });
+
+  it("묶음이 아니면 붙지 않는다 — 편곡·악장만 있는 곡", () => {
+    renderWithProviders(
+      <WorkCard work={workSummary({ scopeNote: scopeNote(["ARRANGEMENT", "MOVEMENT_ONLY"], 2) })} />,
+    );
+    expectNoText("(전곡 기준)");
+  });
+
+  it("scopeNote 가 null 인 곡(수록곡 안내가 빈 곡)에는 붙이지 않는다 — 시스템은 묶음인지 모른다", () => {
+    renderWithProviders(<WorkCard work={workSummary({ scopeNote: null })} />);
+    expectNoText("(전곡 기준)");
+  });
+});
+
 describe("WorkCard (compact — 홈 인기곡·같은 작곡가의 다른 곡)", () => {
   it("순위 · 한국어 제목 · 작곡가 · 난이도 칩 한 줄, 원어 제목 없음", () => {
     renderWithProviders(<WorkCard work={workMoonlight} variant="compact" rank={1} />);

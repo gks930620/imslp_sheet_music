@@ -5,6 +5,7 @@ import { ConfirmDialog } from "../../components/common/ConfirmDialog.jsx";
 import { EmptyState } from "../../components/common/EmptyState.jsx";
 import { ErrorState } from "../../components/common/ErrorState.jsx";
 import { InlineAlert } from "../../components/common/InlineAlert.jsx";
+import { AutoJudgePanel } from "../../components/sheetmusic/admin/AutoJudgePanel.jsx";
 import { showToast } from "../../components/common/Toast.jsx";
 import { useApiResource } from "../../hooks/useApiResource.js";
 import { useComposerOptions } from "../../hooks/useComposerOptions.js";
@@ -12,7 +13,7 @@ import { useDebouncedSearchInput } from "../../hooks/useDebouncedSearchInput.js"
 import { callApi } from "../../lib/http.js";
 import { applyAdminFilter, hasAdminFilter } from "../../lib/adminQuery.js";
 import { buildWorkQuery, withPage } from "../../lib/workQuery.js";
-import { formatEditionKind, formatEditionScope } from "../../lib/format.js";
+import { formatAutoJudgeSkipReason, formatEditionKind, formatEditionScope } from "../../lib/format.js";
 
 const FILTER_KEYS = ["q", "composerId"];
 const QUERY_KEYS = [...FILTER_KEYS, "page"];
@@ -136,8 +137,13 @@ export function CopyrightPendingPage() {
           <span className="material-icons">gavel</span>
           저작권 판정 대기함
         </h1>
-        {data ? <p className="admin-list-count">{`확인 중인 판본 ${data.unfilteredTotal}개`}</p> : null}
+        <span className="page-header-actions">
+          {data ? <p className="admin-list-count">{`확인 중인 판본 ${data.unfilteredTotal}개`}</p> : null}
+        </span>
       </div>
+
+      {/* 02 §7 — 대기함 상단의 자동 판정. 이 단계를 건너뛰면 바로 받기 가능한 곡이 0개다(기획 §F7-6 A) */}
+      <AutoJudgePanel onDone={list.reload} />
 
       <div className="admin-list-filters">
         <span className="search-bar search-bar-compact admin-list-search">
@@ -242,6 +248,8 @@ export function CopyrightPendingPage() {
               <span>판본</span>
               <span>편집자</span>
               <span>IMSLP 표기</span>
+              {/* 02 §5-8 autoJudgeSkipReason — 기존 열 이름과 겹치지 않는 머리글 */}
+              <span>자동 판정</span>
               <span>판정</span>
             </div>
 
@@ -290,6 +298,13 @@ export function CopyrightPendingPage() {
                       </a>
                     ) : null}
                   </span>
+
+                  {/*
+                    자동 판정이 이 판본을 열지 못한 이유(02 §5-8). 사유에 따라 관리자가 할 일이 다르다 —
+                    몰년이 비었으면 작곡가를 고치면 다음 실행에 자동으로 열린다(기획 부록 A §A-2 ②).
+                    값이 없으면 문구도 없다(자동 판정을 돌리면 열릴 판본이라 할 말이 없다).
+                  */}
+                  <span className="pending-skip-reason">{formatAutoJudgeSkipReason(row.autoJudgeSkipReason)}</span>
 
                   <span className="pending-judge">
                     {VERDICTS.map((item) => (

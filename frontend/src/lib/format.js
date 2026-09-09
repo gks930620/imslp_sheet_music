@@ -196,6 +196,14 @@ export function formatCount(value) {
    별칭 일치 줄과 같은 자리·같은 한 줄이라 여기서 함께 만든다.
    --------------------------------------------------------------------- */
 
+/**
+ * 묶음 악보인가 (02 §2-2-1 COLLECTION 의 두 번째 쓰임).
+ * "COLLECTION" 코드 문자열의 단일 출처 — 별칭 문구와 '(전곡 기준)' 꼬리표가 같은 판정을 쓴다.
+ */
+export function isCollectionWork(scopeNote) {
+  return (scopeNote?.codes ?? []).includes("COLLECTION");
+}
+
 /** MOVEMENT_ONLY 문구. 수집이 악장 번호를 못 읽었으면 폴백(발췌) */
 function movementOnlyText(movementNumber) {
   return movementNumber ? `${movementNumber}악장만 들어 있어요` : "일부 악장만 들어 있어요";
@@ -207,7 +215,7 @@ function movementOnlyText(movementNumber) {
  */
 export function formatWorkScopeLine({ matchedAlias = null, scopeNote = null } = {}) {
   const codes = scopeNote?.codes ?? [];
-  const isCollection = codes.includes("COLLECTION");
+  const isCollection = isCollectionWork(scopeNote);
   const parts = [];
 
   if (matchedAlias) {
@@ -217,6 +225,26 @@ export function formatWorkScopeLine({ matchedAlias = null, scopeNote = null } = 
   if (codes.includes("MOVEMENT_ONLY")) parts.push(movementOnlyText(scopeNote?.movementNumber));
 
   return parts.join(" · ");
+}
+
+const AUTO_JUDGE_SKIP_REASON_LABELS = {
+  LICENSE_NOT_REDISTRIBUTABLE: "재배포 허용 라이선스가 아님",
+  COMPOSER_DEATH_YEAR_UNKNOWN: "작곡가 몰년을 모름",
+  COMPOSER_COPYRIGHT_ACTIVE: "작곡가 사후 70년 미경과",
+  PUBLICATION_TOO_RECENT: "출판 70년 미경과",
+  EDITOR_UNVERIFIABLE: "편집자 생몰 확인 필요",
+};
+
+/**
+ * 자동 판정이 이 판본을 열지 못한 이유(02 §5-8 autoJudgeSkipReason · §5-11 skipped[].reason).
+ * 대기함 행과 자동 판정 미리보기 모달이 함께 쓰는 단일 출처다.
+ *
+ * 폴백이 다른 함수들과 다르다: 값이 없으면 빈 문자열(자동으로 열릴 판본이라 할 말이 없다),
+ * 모르는 코드는 코드를 그대로 돌려준다 — 삼키면 관리자의 일감이 설명 없이 사라진다.
+ */
+export function formatAutoJudgeSkipReason(reason) {
+  if (!reason) return "";
+  return AUTO_JUDGE_SKIP_REASON_LABELS[reason] ?? reason;
 }
 
 /** 추천 지정 경고(02 §5-6) — 판본의 악장 번호는 화면이 이미 가진 데이터에서 쓴다 */

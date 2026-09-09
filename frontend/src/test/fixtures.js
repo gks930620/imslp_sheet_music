@@ -202,6 +202,11 @@ export function workDetail(overrides = {}) {
     musicalKey: "C-sharp minor",
     movements: "3 movements",
     movementPageGuide: "1악장 1쪽 · 2악장 6쪽 · 3악장 9쪽",
+    // §3-3 collectionGuide — 기본값은 null(= 묶음이 아님, 화면은 줄을 만들지 않는다).
+    // 값을 넣으면 §2-2-1 상 이 곡의 scopeNote.codes 에 COLLECTION 이 있어야 하는데, 같은 곡(id 21)의
+    // 요약 픽스처 workMoonlight 는 scopeNote: null 이다 — 기본값을 채우면 두 픽스처가 계약상 서로 어긋난다.
+    // 묶음 곡을 시험할 때는 collectionGuide 와 scopeNote(scopeNote(["COLLECTION"])) 를 함께 넘긴다.
+    collectionGuide: null,
     imslpUrl: "https://imslp.org/wiki/Piano_Sonata_No.14,_Op.27_No.2_(Beethoven,_Ludwig_van)",
     composerImslpUrl: "https://imslp.org/wiki/Category:Beethoven,_Ludwig_van",
     recommendedEdition: editionRecommended,
@@ -603,16 +608,25 @@ export function pendingCopyright(overrides = {}) {
     imslpCopyrightText: "Public Domain",
     imslpFileUrl: "https://imslp.org/wiki/Special:ImagefromIndex/00014",
     hasFile: true,
+    // §5-8 autoJudgeSkipReason — "지금 자동 판정(§5-11)을 돌리면 이 판본이 왜 안 열리는지".
+    // 이 행의 값이 §A-1 규칙 8 인 이유: PD 표기(1 통과) + 쇼팽 몰년 1849(2·3 통과) + 편집자 표기 있음(5 아님)
+    // + 1949년 출판이라 120년 미경과(7 아님) → EDITOR_UNVERIFIABLE. 명세서 §5-8 예시와 같은 행이다.
+    // 자동 판정으로 FREE 가 될 수 있는 판본이면 null 이고, 그때 화면은 아무 문구도 만들지 않는다.
+    autoJudgeSkipReason: "EDITOR_UNVERIFIABLE",
     ...overrides,
   };
 }
 
+// 몰년이 없는 데다 표기가 NC(재배포 불가)다. §A-1 은 위에서부터 먼저 걸리는 곳에서 끝나므로
+// 사유는 COMPOSER_DEATH_YEAR_UNKNOWN(규칙 2)이 아니라 규칙 1 이다 — 사유는 "그 판본의 모든 문제"가
+// 아니라 "제일 먼저 막은 하나"다.
 export const pendingNoDeathYear = pendingCopyright({
   editionId: 306,
   work: { id: 21, titleKo: "월광 소나타", titleOriginal: "Piano Sonata No.14, Op.27 No.2" },
   composer: { id: 4, nameKo: "베토벤", nameOriginal: "Beethoven, Ludwig van", deathYear: null },
   editor: null,
   imslpCopyrightText: "Creative Commons Attribution Non-commercial 3.0",
+  autoJudgeSkipReason: "LICENSE_NOT_REDISTRIBUTABLE",
 });
 
 /** §5-8 응답 data */

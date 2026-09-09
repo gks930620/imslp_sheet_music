@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { LevelChip } from "./LevelChip.jsx";
 import { StatusBadge } from "./StatusBadge.jsx";
-import { formatWorkScopeLine } from "../../lib/format.js";
+import { formatWorkScopeLine, isCollectionWork } from "../../lib/format.js";
 
 function composerText(composer) {
   if (!composer) return "";
@@ -37,6 +37,7 @@ export function WorkCard({ work, variant = "full", rank, hideComposer = false, h
     matchedAlias: hideAlias ? null : work.matchedAlias,
     scopeNote: work.scopeNote,
   });
+  const isCollection = isCollectionWork(work.scopeNote);
 
   return (
     <Link className="work-card" to={`/works/${work.id}`}>
@@ -57,6 +58,9 @@ export function WorkCard({ work, variant = "full", rank, hideComposer = false, h
         <span className="work-card-tags">
           <LevelChip level={work.level} />
           {work.pageCount ? <span className="work-card-pages">{work.pageCount}쪽</span> : null}
+          {/* 02 §2-2-1 · 기획 §12-2 — 묶음 악보의 난이도·쪽수는 묶음 전체 기준이다.
+              둘 다에 걸리는 꼬리표라 줄 끝에 한 번만 붙인다 (쪽수가 없으면 난이도 뒤). */}
+          {isCollection ? <span className="work-card-scope-basis">(전곡 기준)</span> : null}
         </span>
         {scopeLine ? <span className="work-card-alias">{scopeLine}</span> : null}
       </span>

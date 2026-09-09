@@ -2040,6 +2040,7 @@ a {
 }
 
 .work-detail-aliases,
+.work-detail-collection,
 .work-detail-guide {
   font-size: var(--font-size-md);
   color: var(--color-text-secondary);
@@ -2052,6 +2053,7 @@ a {
   margin-top: var(--space-2);
 }
 
+.work-detail-collection .material-icons,
 .work-detail-guide .material-icons {
   font-size: var(--icon-size-sm);
   vertical-align: middle;
@@ -3336,6 +3338,37 @@ a {
 }
 
 /* --- 저작권 판정 대기함 (06-C) ---------------------------------------- */
+/* --- 자동 판정 (06-C 상단, 02 §5-11·5-12) ----------------------------- */
+.auto-judge {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.auto-judge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.auto-judge-line {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.auto-judge-sub {
+  margin-top: var(--space-3);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.auto-judge-count {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
 .copyright-bulk-bar {
   position: sticky;
   top: var(--header-height);
@@ -3358,7 +3391,8 @@ a {
 .pending-composer,
 .pending-edition,
 .pending-editor,
-.pending-imslp {
+.pending-imslp,
+.pending-skip-reason {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
@@ -3401,7 +3435,7 @@ a {
 
   .copyright-table .data-table-head,
   .copyright-table .data-table-row {
-    grid-template-columns: 40px 1.2fr 140px 140px 120px 1fr 1.6fr;
+    grid-template-columns: 40px 1.2fr 140px 140px 120px 1fr 150px 1.6fr;
     align-items: start;
   }
 
