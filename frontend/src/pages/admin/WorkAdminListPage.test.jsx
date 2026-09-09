@@ -45,6 +45,21 @@ function pickOption(labelText, optionName) {
   return { select, option: within(select).getByRole("option", { name: optionName }) };
 }
 
+/**
+ * 필터 select 의 선택지를 [value, 문구] 목록으로 뽑는다.
+ *
+ * <p>선택지는 <b>개수가 아니라 목록으로</b> 단언한다(2026-09-08, senior-dev). 개수만 세면 항목 하나가
+ * 바뀌어도 수가 같으면 안 걸리는데, 실제로 그렇게 놓쳤다 — §4-6 에 `NEEDS_RECOMMENDATION_REVIEW` 가
+ * 들어와 상태가 7종이 됐는데 "7개" 단언은 그대로 통과했고, 곡 목록 필터에서 그 항목만 조용히 빠졌다.
+ *
+ * <p>문구뿐 아니라 <b>value 까지</b> 단언한다. 관리자가 보는 것은 문구지만 서버로 나가는 것(=계약)은 value 다.
+ */
+function optionPairs(labelText) {
+  return within(screen.getByLabelText(labelText))
+    .getAllByRole("option")
+    .map((option) => [option.value, option.textContent]);
+}
+
 describe("WorkAdminListPage — 머리말·표", () => {
   it("브레드크럼 '관리 › 곡 관리', 제목, '새 곡' 버튼", async () => {
     renderPage();
@@ -158,24 +173,44 @@ describe("WorkAdminListPage — 검색·필터·페이지", () => {
     }
   });
 
-  it("상태 select 선택지 7개(전체 + 6종)", async () => {
+  // §4-6 status = READY | PREPARING | RESTRICTED | UNKNOWN | NEEDS_WORK | NEEDS_RECOMMENDATION_REVIEW | HIDDEN
+  // NEEDS_RECOMMENDATION_REVIEW 문구는 관리 홈 카드(§4-1 "추천 판본 확인 필요")와 같은 말을 쓴다 —
+  // 그 카드가 이 목록으로 들어오는 입구라, 다른 말을 쓰면 관리자는 자기가 누른 필터가 걸렸는지 알 수 없다.
+  it("상태 select 선택지 = '전체' + §4-6 status 7종 (값·문구·순서)", async () => {
     renderPage();
     await findText("월광 소나타");
-    const select = screen.getByLabelText("상태");
-    for (const name of ["전체", "바로 받기 가능", "준비 중", "이용 제한", "저작권 확인 중", "보완 필요", "숨김"]) {
-      expect(within(select).getByRole("option", { name })).toBeInTheDocument();
-    }
-    expect(within(select).getAllByRole("option")).toHaveLength(7);
+    expect(optionPairs("상태")).toEqual([
+      ["", "전체"],
+      ["READY", "바로 받기 가능"],
+      ["PREPARING", "준비 중"],
+      ["RESTRICTED", "이용 제한"],
+      ["UNKNOWN", "저작권 확인 중"],
+      ["NEEDS_WORK", "보완 필요"],
+      ["NEEDS_RECOMMENDATION_REVIEW", "추천 판본 확인 필요"],
+      ["HIDDEN", "숨김"],
+    ]);
   });
 
-  it("난이도 select 선택지 6개(전체 + 5종)", async () => {
+  it("난이도 select 선택지 = '전체' + §4-6 level 5종 (값·문구·순서)", async () => {
     renderPage();
     await findText("월광 소나타");
-    const select = screen.getByLabelText("난이도");
-    for (const name of ["전체", "입문", "초급", "중급", "고급", "미정"]) {
-      expect(within(select).getByRole("option", { name })).toBeInTheDocument();
-    }
-    expect(within(select).getAllByRole("option")).toHaveLength(6);
+    expect(optionPairs("난이도")).toEqual([
+      ["", "전체"],
+      ["BEGINNER", "입문"],
+      ["ELEMENTARY", "초급"],
+      ["INTERMEDIATE", "중급"],
+      ["ADVANCED", "고급"],
+      ["NONE", "미정"],
+    ]);
+  });
+
+  // 관리 홈 카드 → /admin/works?status=NEEDS_RECOMMENDATION_REVIEW (§4-1 · §4-6, 같은 모집단).
+  // 선택지가 없으면 서버 필터는 걸리는데 select 만 "전체" 로 보인다 — 관리자는 목록이 왜 짧은지 알 수 없다.
+  it("관리 홈 '추천 판본 확인 필요' 카드로 들어오면 select 도 그 필터를 보여준다", async () => {
+    renderPage("/admin/works?status=NEEDS_RECOMMENDATION_REVIEW");
+    await findText("월광 소나타");
+    expect(lastParams().get("status")).toBe("NEEDS_RECOMMENDATION_REVIEW");
+    expect(screen.getByLabelText("상태")).toHaveDisplayValue("추천 판본 확인 필요");
   });
 
   it("작곡가 select 는 작곡가 목록으로 채우고 한글 표기가 없으면 원어를 쓴다", async () => {

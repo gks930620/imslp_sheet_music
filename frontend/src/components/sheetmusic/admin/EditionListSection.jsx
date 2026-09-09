@@ -37,6 +37,7 @@ export function EditionListSection({
   editions = [],
   recommendedEditionId = null,
   candidateEditionId = null,
+  recommendationReviewed = false,
   composer = null,
   onChanged,
   onToast,
@@ -163,6 +164,25 @@ export function EditionListSection({
     }
   };
 
+  /**
+   * 02 §5-6-1 — 추천 판본 확인함. 확인은 "그 판본" 이 아니라 "지금 추천" 에 붙는 상태라 곡 단위 API 다.
+   * 추천이 바뀌면 서버가 다시 false 로 만든다(§5-6 · §5-11).
+   */
+  const review = async (reviewed) => {
+    setRowAlert(recommendedEditionId, null);
+    try {
+      await callApi(`/api/admin/works/${workId}/recommended-edition/review`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewed }),
+      });
+      onToast?.(reviewed ? "추천 판본을 확인했어요" : "확인을 해제했어요");
+      onChanged?.();
+    } catch {
+      setRowAlert(recommendedEditionId, { kind: "action-failed" });
+    }
+  };
+
   const savedEdition = (saved) => {
     setModal(null);
     onToast?.(
@@ -286,6 +306,29 @@ export function EditionListSection({
                     >
                       {isFetching ? "받아오는 중…" : "파일 받아오기"}
                     </button>
+                  ) : null}
+
+                  {isRecommended ? (
+                    recommendationReviewed ? (
+                      <>
+                        <span className="status-badge badge-reviewed">
+                          <span className="material-icons" aria-hidden="true">
+                            verified
+                          </span>
+                          확인함
+                        </span>
+                        <button className="btn btn-text" type="button" onClick={() => review(false)}>
+                          확인 해제
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn btn-outline" type="button" onClick={() => review(true)}>
+                          확인함
+                        </button>
+                        <span className="form-help">미리보기를 열어 피아노 악보가 맞는지 확인해 주세요</span>
+                      </>
+                    )
                   ) : null}
 
                   {!isRecommended ? (

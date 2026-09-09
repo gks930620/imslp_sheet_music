@@ -20,4 +20,10 @@ public interface WorkRepositoryCustom {
 
     /** 관리 홈 {@code needsWorkWorks} (02 §4-1) — 목록 필터·곡 상세와 같은 {@code WorkNeedsWork} 규칙. */
     long countNeedsWork();
+
+    /**
+     * 관리 홈 {@code needsRecommendationReviewWorks} (02 §4-1) — 곡 목록 필터
+     * {@code status=NEEDS_RECOMMENDATION_REVIEW} 와 같은 {@code WorkRecommendationReview} 규칙(숨김 제외).
+     */
+    long countNeedsRecommendationReview();
 }

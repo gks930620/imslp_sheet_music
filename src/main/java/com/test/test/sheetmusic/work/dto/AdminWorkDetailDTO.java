@@ -44,6 +44,8 @@ public class AdminWorkDetailDTO {
     private List<WorkMissing> missing;
     private Long recommendedEditionId;
     private Long candidateEditionId;
+    /** 지금 추천 판본이 사람 눈을 통과했는가 (02 §4-7 · §5-6-1, 2026-09-08 신설). */
+    private boolean recommendationReviewed;
     private long downloadCount;
     private boolean hasDownloadHistory;
     private List<AdminEditionDTO> editions;

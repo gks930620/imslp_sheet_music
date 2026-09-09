@@ -584,6 +584,7 @@ export function WorkFormPage() {
               editions={editions}
               recommendedEditionId={loaded.recommendedEditionId}
               candidateEditionId={loaded.candidateEditionId}
+              recommendationReviewed={loaded.recommendationReviewed}
               composer={loaded.composer}
               onChanged={detail.reload}
               onToast={showToast}

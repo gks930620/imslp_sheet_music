@@ -31,6 +31,7 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -108,6 +109,17 @@ public class WorkEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recommended_edition_id")
     private EditionEntity recommendedEdition;
+
+    /**
+     * 지금 추천 판본이 사람 눈을 통과했는가 (01_ERD §3-3, 02 §5-6-1 — 2026-09-08 추가).
+     *
+     * <p>자동 추천 지정은 "전체 악보 · 전곡" 만 보므로 관현악 총보가 추천이 될 수 있어(기획 §10-8),
+     * 공개 기준(§8-17)이 "추천 판본 미검수 0곡" 을 요구한다. <b>"누가·언제" 는 남기지 않는다</b> —
+     * 이 값이 답하는 질문은 하나뿐이고 그 답은 추천이 바뀌는 순간 무효가 되므로 이력이 아니라 상태다.
+     */
+    @Column(name = "recommended_edition_reviewed", nullable = false)
+    @ColumnDefault("false")
+    private boolean recommendedEditionReviewed;
 
     @Column(name = "download_count", nullable = false)
     private long downloadCount;
@@ -293,12 +305,40 @@ public class WorkEntity {
                 .orElse(null);
     }
 
+    /**
+     * 추천 지정 (02 §5-6). <b>추천이 달라지면 검수는 무효</b>다 — 확인한 것은 "그 판본" 이 아니라 "지금 추천" 이라,
+     * 자동 지정(§5-11)이든 관리자 지정이든 새 추천은 아직 아무도 보지 않은 것이다(§5-6-1).
+     * 같은 판본을 다시 지정하는 것은 추천이 바뀐 것이 아니므로 확인을 유지한다.
+     */
     public void recommend(EditionEntity edition) {
+        if (!isSameRecommendation(edition)) {
+            this.recommendedEditionReviewed = false;
+        }
         this.recommendedEdition = edition;
     }
 
+    /** 추천 해제 — 검수 대상 자체가 없어지므로 검수 상태도 false 로 돌아간다(02 §4-6 · §5-6-1). */
     public void clearRecommendation() {
         this.recommendedEdition = null;
+        this.recommendedEditionReviewed = false;
+    }
+
+    /** 추천 판본 확인함/되돌리기 (02 §5-6-1). 추천이 없는 곡은 확인할 대상이 없다 — 호출 전에 서비스가 막는다. */
+    public void reviewRecommendation(boolean reviewed) {
+        this.recommendedEditionReviewed = reviewed && this.recommendedEdition != null;
+    }
+
+    /** 지금 추천이 검수를 기다리는가 — 규칙 원본은 {@link WorkRecommendationReview} 하나다(관리 홈·목록 필터와 공유). */
+    public boolean needsRecommendationReview() {
+        return WorkRecommendationReview.needsReview(this);
+    }
+
+    private boolean isSameRecommendation(EditionEntity edition) {
+        if (this.recommendedEdition == null || edition == null) {
+            return this.recommendedEdition == edition;
+        }
+        return this.recommendedEdition.getId() != null
+                && this.recommendedEdition.getId().equals(edition.getId());
     }
 
     public void increaseDownloadCount() {

@@ -459,6 +459,9 @@ export function adminWorkSummary(overrides = {}) {
     level: "INTERMEDIATE",
     editionCount: 14,
     hasRecommended: true,
+    // §4-6 · §5-6-1 — 같은 곡(id 21)의 상세 픽스처 adminWorkDetail 과 같은 값이어야 한다.
+    // hasRecommended: false 로 덮을 때는 이 값도 반드시 false 다("검수할 대상이 없다").
+    recommendationReviewed: false,
     status: "READY",
     needsWork: false,
     hidden: false,
@@ -476,6 +479,7 @@ export const adminWorkNeedsWork = adminWorkSummary({
   level: null,
   editionCount: 6,
   hasRecommended: false,
+  recommendationReviewed: false,
   status: "PREPARING",
   needsWork: true,
   updatedAt: "2026-09-06T04:00:00Z",
@@ -487,6 +491,7 @@ export const adminWorkHidden = adminWorkSummary({
   titleOriginal: "Symphony No.5, Op.67",
   editionCount: 3,
   hasRecommended: false,
+  recommendationReviewed: false,
   status: "PREPARING",
   needsWork: true,
   hidden: true,
@@ -571,6 +576,8 @@ export function adminWorkDetail(overrides = {}) {
     missing: [],
     recommendedEditionId: 301,
     candidateEditionId: null,
+    // §4-7 · §5-6-1 — 추천이 바뀌거나 해제되면 서버가 false 로 되돌린다. 요약 픽스처와 같은 값.
+    recommendationReviewed: false,
     downloadCount: 312,
     hasDownloadHistory: true,
     editions: [adminEditionRecommended],

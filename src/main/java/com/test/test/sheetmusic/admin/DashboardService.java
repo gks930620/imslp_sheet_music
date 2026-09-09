@@ -44,6 +44,7 @@ public class DashboardService {
                 .readyWorks(workRepository.countReady())
                 .preparingWorks(workRepository.countPreparing())
                 .needsWorkWorks(workRepository.countNeedsWork())
+                .needsRecommendationReviewWorks(workRepository.countNeedsRecommendationReview())
                 .unknownCopyrightEditions(editionRepository.countUnknownCopyright())
                 .monthlyDownloads(downloadLogRepository.countSince(startOfMonth()))
                 .latestJob(latest == null ? null : crawlJobDtoAssembler.toDto(latest))

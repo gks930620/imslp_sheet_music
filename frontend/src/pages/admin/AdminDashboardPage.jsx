@@ -10,6 +10,13 @@ const STAT_CARDS = [
   { key: "readyWorks", label: "바로 받기 가능", to: "/admin/works?status=READY" },
   { key: "preparingWorks", label: "준비 중", to: "/admin/works?status=PREPARING" },
   { key: "needsWorkWorks", label: "보완 필요", to: "/admin/works?status=NEEDS_WORK", tone: "danger" },
+  {
+    // 02 §4-1 · §5-6-1 — 공개 기준(§8-17 "추천 판본 미검수 0곡")을 재는 숫자. §4-6 목록과 같은 모집단이다
+    key: "needsRecommendationReviewWorks",
+    label: "추천 판본 확인 필요",
+    to: "/admin/works?status=NEEDS_RECOMMENDATION_REVIEW",
+    tone: "warning",
+  },
   { key: "unknownCopyrightEditions", label: "저작권 확인 중 판본", to: "/admin/copyright", tone: "warning" },
   { key: "monthlyDownloads", label: "이번 달 다운로드", to: null },
 ];

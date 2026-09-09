@@ -3115,6 +3115,21 @@ a {
   border-color: var(--badge-admin-needs-work-text);
 }
 
+/* 05-D 미검수 (02 §4-6) — 실패가 아니라 "아직 안 봤다" 라서 확인 중과 같은 톤을 쓴다.
+   전용 뱃지 토큰·문구는 designer 결정 대기 */
+/* 06-A 확인함 표식 (02 §5-6-1) — 통과한 상태라 자유 이용 뱃지와 같은 톤 */
+.badge-reviewed {
+  background-color: var(--badge-free-bg);
+  color: var(--badge-free-text);
+  border-color: var(--badge-free-border);
+}
+
+.badge-needs-review {
+  background-color: var(--badge-unknown-bg);
+  color: var(--badge-unknown-text);
+  border-color: var(--badge-unknown-border);
+}
+
 .badge-hidden {
   background-color: var(--badge-admin-hidden-bg);
   color: var(--badge-admin-hidden-text);

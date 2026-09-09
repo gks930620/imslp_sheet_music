@@ -44,8 +44,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class AdminWorkService {
 
-    private static final List<String> STATUS_VALUES =
-            List.of("READY", "PREPARING", "RESTRICTED", "UNKNOWN", "NEEDS_WORK", "HIDDEN");
+    private static final List<String> STATUS_VALUES = List.of("READY", "PREPARING", "RESTRICTED", "UNKNOWN",
+            "NEEDS_WORK", "NEEDS_RECOMMENDATION_REVIEW", "HIDDEN");
 
     private final WorkRepository workRepository;
     private final WorkAliasRepository workAliasRepository;
@@ -93,6 +93,7 @@ public class AdminWorkService {
                     .level(work.getLevel())
                     .editionCount(editionCounts.getOrDefault(work.getId(), 0L).intValue())
                     .hasRecommended(work.getRecommendedEdition() != null)
+                    .recommendationReviewed(work.isRecommendedEditionReviewed())
                     .status(work.status())
                     .needsWork(work.needsWork())
                     .hidden(work.isHidden())
@@ -163,6 +164,25 @@ public class AdminWorkService {
                 request.getMovementPageGuide(), request.getCollectionGuide(), canonicalUrl, request.isHidden());
         work.replaceAliases(request.getAliases(), AliasSource.ADMIN);
         work.replaceCatalogNumbers(request.getCatalogNumbers());
+        return toDetail(work);
+    }
+
+    // ===== §5-6-1 추천 판본 확인함 =====
+
+    /**
+     * 추천 판본 확인함/되돌리기 (02 §5-6-1). 응답은 곡 상세(관리) 그대로라 화면이 다시 조회하지 않아도 된다.
+     *
+     * <p>추천이 없는 곡에 {@code true} 는 400 이다 — 확인할 대상이 없다. {@code false} 로 되돌리기는
+     * 추천 유무와 무관하게 허용한다(잘못 눌렀을 때 빠져나갈 길이 없으면 관리자가 확인 자체를 미룬다).
+     */
+    @Transactional
+    public AdminWorkDetailDTO reviewRecommendation(Long workId, Boolean reviewed) {
+        WorkEntity work = findOrThrow(workId);
+        boolean value = Boolean.TRUE.equals(reviewed);
+        if (value && work.getRecommendedEdition() == null) {
+            throw FieldValidationException.of("reviewed", "추천 판본이 없어 확인할 수 없어요", reviewed);
+        }
+        work.reviewRecommendation(value);
         return toDetail(work);
     }
 
@@ -245,6 +265,7 @@ public class AdminWorkService {
                 .missing(work.missing())
                 .recommendedEditionId(recommendedId)
                 .candidateEditionId(candidateId)
+                .recommendationReviewed(work.isRecommendedEditionReviewed())
                 .downloadCount(work.getDownloadCount())
                 .hasDownloadHistory(downloadLogRepository.existsByWorkId(work.getId()))
                 .editions(editionDtos)

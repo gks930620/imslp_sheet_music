@@ -20,6 +20,7 @@ import com.test.test.sheetmusic.work.QWorkCatalogNumberEntity;
 import com.test.test.sheetmusic.work.QWorkEntity;
 import com.test.test.sheetmusic.work.WorkEntity;
 import com.test.test.sheetmusic.work.WorkNeedsWork;
+import com.test.test.sheetmusic.work.WorkRecommendationReview;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -98,6 +99,15 @@ public class WorkRepositoryImpl implements WorkRepositoryCustom {
                 .from(WORK)
                 .leftJoin(WORK.recommendedEdition, RECOMMENDED)
                 .where(WorkNeedsWork.predicate(WORK, RECOMMENDED))
+                .fetchOne();
+        return total == null ? 0L : total;
+    }
+
+    @Override
+    public long countNeedsRecommendationReview() {
+        Long total = queryFactory.select(WORK.count())
+                .from(WORK)
+                .where(WorkRecommendationReview.predicate(WORK))
                 .fetchOne();
         return total == null ? 0L : total;
     }
@@ -216,6 +226,7 @@ public class WorkRepositoryImpl implements WorkRepositoryCustom {
                     .and(RECOMMENDED.koreaCopyright.eq(KoreaCopyright.UNKNOWN));
             case "HIDDEN" -> WORK.hidden.isTrue();
             case "NEEDS_WORK" -> WorkNeedsWork.predicate(WORK, RECOMMENDED);
+            case "NEEDS_RECOMMENDATION_REVIEW" -> WorkRecommendationReview.predicate(WORK);
             default -> throw new BusinessRuleException("상태 값이 올바르지 않아요: " + statusFilter);
         };
     }

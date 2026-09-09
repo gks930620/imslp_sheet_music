@@ -22,6 +22,8 @@ const STATUS_OPTIONS = [
   { value: "RESTRICTED", label: "이용 제한" },
   { value: "UNKNOWN", label: "저작권 확인 중" },
   { value: "NEEDS_WORK", label: "보완 필요" },
+  // WorkStatus 가 아닌 목록 필터 전용 값(02 §4-6) — 입구인 관리 홈 카드와 같은 말을 쓴다
+  { value: "NEEDS_RECOMMENDATION_REVIEW", label: "추천 판본 확인 필요" },
   { value: "HIDDEN", label: "숨김" },
 ];
 
@@ -59,6 +61,15 @@ function formatWorkListDate(value) {
   if (Number.isNaN(date.getTime())) return "-";
   const monthDay = `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   return date.getFullYear() === new Date().getFullYear() ? monthDay : `${date.getFullYear()}-${monthDay}`;
+}
+
+/**
+ * 02 §4-6 recommendationReviewed — 추천이 "있는데" 사람 눈을 통과하지 않은 곡의 표시.
+ * 서버가 필드를 안 내리면(undefined) 달지 않는다 — 없는 것을 미검수라고 단정하지 않는다.
+ */
+function NeedsReviewBadge({ work }) {
+  if (!work.hasRecommended || work.recommendationReviewed !== false) return null;
+  return <span className="status-badge badge-needs-review">미검수</span>;
 }
 
 function WorkStatusBadges({ work }) {
@@ -273,6 +284,7 @@ export function WorkAdminListPage() {
                     </span>
                     <span className="admin-work-status">
                       <WorkStatusBadges work={work} />
+                      <NeedsReviewBadge work={work} />
                     </span>
                     <span className="admin-work-updated">{formatWorkListDate(work.updatedAt)}</span>
                   </div>

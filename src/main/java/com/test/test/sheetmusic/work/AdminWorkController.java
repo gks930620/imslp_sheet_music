@@ -5,6 +5,7 @@ import com.test.test.sheetmusic.common.AdminPageRequests;
 import com.test.test.sheetmusic.work.dto.AdminWorkDetailDTO;
 import com.test.test.sheetmusic.work.dto.AdminWorkListDTO;
 import com.test.test.sheetmusic.work.dto.AliasOverlapDTO;
+import com.test.test.sheetmusic.work.dto.RecommendationReviewDTO;
 import com.test.test.sheetmusic.work.dto.WorkSaveDTO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -62,6 +63,18 @@ public class AdminWorkController {
     public ResponseEntity<ApiResponse<AdminWorkDetailDTO>> update(@PathVariable Long id,
                                                                   @Valid @RequestBody WorkSaveDTO request) {
         return ResponseEntity.ok(ApiResponse.success(adminWorkService.update(id, request)));
+    }
+
+    /**
+     * 추천 판본 확인함/되돌리기 (02 §5-6-1) — 응답은 곡 상세(관리) 그대로다.
+     * 추천 지정(§5-6)은 판본 API 에 있지만 이것이 바꾸는 것은 곡의 상태이고 응답도 곡이라 여기에 둔다.
+     */
+    @PutMapping("/{workId}/recommended-edition/review")
+    public ResponseEntity<ApiResponse<AdminWorkDetailDTO>> reviewRecommendation(
+            @PathVariable Long workId,
+            @Valid @RequestBody RecommendationReviewDTO request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminWorkService.reviewRecommendation(workId, request.getReviewed())));
     }
 
     @DeleteMapping("/{id}")
