@@ -110,10 +110,24 @@
 
 | 파일 | `/uploads` |
 |---|---|
-| 판본 미리보기 PNG (`ref_type=EDITION`, `file_usage=THUMBNAIL`) | 200 |
+| 판본 미리보기 PNG — 그 판본이 `koreaCopyright = FREE` | 200 |
+| 판본 미리보기 PNG — 그 판본이 `RESTRICTED`/`UNKNOWN` | **404** (단 **ADMIN 인증이면 200**) |
 | 커뮤니티·사용자 파일 (`ref_type=COMMUNITY/USER`, 이미지·첨부) | 200 |
 | **판본 PDF** (`ref_type=EDITION` 의 PDF) | **404** — 판정이 `FREE` 여도 |
 | `files` 행이 없는 저장 파일명(고아 바이트·없는 이름) | **404** |
+
+**판정이 안 끝난 판본은 미리보기도 감춘다 (2026-09-08 확정, senior-dev — qa 4차 결함 2).**
+표의 첫 두 줄이 그것이다. 원래 표는 미리보기를 무조건 200 으로 적었고 기획 §F3-6 · §5 예외표는 감추라고 했다 —
+계약이 없어서 코드는 표를 따랐다(실측: UNKNOWN 판본 10건이 공개 응답에 `previewUrl` 을 싣고 직접 GET 도 200).
+
+- **응답과 서빙을 둘 다 막는다.** 응답(`previewUrl = null`, §2-2 · §2-3)만 막으면 **저장 파일명을 아는 사람에게는 그대로 열려 있다.**
+  이름은 없어지지 않는다 — FREE 였다가 판정이 뒤집힌 판본의 옛 응답·브라우저 기록, 서버의 `uploads/` 폴더(qa 3차가 실제로 쓴 수단).
+  "우리 응답에 안 실렸으니 닫힌 것"이라는 판단이 정확히 `/images` 사고였다. 재배포 책임(기획 `02_저작권_판정_지침` A-4)은
+  **우리 도메인이 그 바이트를 주느냐**로 정해지지, 우리 JSON 이 주소를 알려줬느냐로 정해지지 않는다.
+  반대로 서빙만 막으면 화면에 깨진 이미지가 뜨고 화면이 문구를 고를 수 없다 — 하나로는 둘 다 못 한다.
+- **ADMIN 은 통과한다.** 판정 근거가 미리보기 그 자체다(기획 §F6-4 (B)3). 판정 안 된 판본의 미리보기를 관리자에게 감추면
+  판정 자체가 불가능하다. 관리 웹은 쿠키 인증(`credentials: "include"`)이라 `<img src="/uploads/…">` 에도 권한이 실린다.
+- 계약 검증: `EditionPreviewExposureIntegrationTest`.
 
 - 이 프록시는 저작권 게이트를 태우지 않고 다운로드 수도 세지 않는다. 그래서 판본 바이트는 **§3-4 한 문으로만** 나간다.
   (qa 3차 실측: 비로그인·헤더 없이 `uploads/` PDF 80개·515MB 전량이 열려 있었고, 같은 판본의 §3-4 는 403 이었다.)
@@ -207,6 +221,7 @@
 | PUT | `/api/admin/editions/{id}` | 판본 수정(파일 교체 포함) | 06-B |
 | DELETE | `/api/admin/editions/{id}` | 판본 삭제 | 06-A |
 | PUT | `/api/admin/works/{workId}/recommended-edition` | 추천 판본 지정 | 06-A |
+| PUT | `/api/admin/works/{workId}/recommended-edition/review` | 추천 판본 확인함/해제 (§5-6-1) | 06-A |
 | POST | `/api/admin/editions/{id}/fetch-file` | IMSLP 에서 이 판본 파일 받아오기(비동기) | 06-A |
 | GET | `/api/admin/copyright/pending` | 저작권 판정 대기함 | 06-C |
 | PUT | `/api/admin/editions/{id}/copyright` | 판정 1건 | 06-C |
@@ -247,7 +262,7 @@
 | status | `READY\|PREPARING\|RESTRICTED\|UNKNOWN` | 01_ERD §4 계산 규칙 |
 | pageCount | int\|null | 추천 판본 쪽수. 추천 판본 없으면 null |
 | fileSize | long\|null | 추천 판본 바이트 |
-| previewUrl | string\|null | 추천 판본 첫 페이지 |
+| previewUrl | string\|null | 추천 판본 첫 페이지. **추천 판본이 `FREE` 일 때만** 값이 있다(§0-4 · §2-3 과 같은 규칙) |
 | matchedAlias | string\|null | **검색 응답에서만** 값이 있다(§3-1). 그 외 항상 null |
 | scopeNote | object\|null | **2026-09-08 추가(기획 §11-2).** "받게 되는 악보가 찾은 것과 어떻게 다른가" **한 줄**을 만들 재료. 할 말이 없으면 **null** — 대부분의 곡이 여기 해당한다. 아래 2-2-1 |
 
@@ -275,6 +290,15 @@
 - **추천 판본이 없는 곡**은 `ARRANGEMENT`/`MOVEMENT_ONLY` 를 판정할 근거가 없다 → `COLLECTION` 만 나올 수 있다.
 - `WorkSummaryDTO` 를 쓰는 **모든 응답**(§3-1 검색 · §3-2 인기곡 · §3-3 sameComposerWorks · §3-8 작곡가의 곡)에서 같은 규칙으로 채운다. `matchedAlias` 처럼 한 응답에서만 채우는 값이 아니다.
 
+**`COLLECTION` 의 두 번째 쓰임 — 난이도·쪽수의 "(전곡 기준)" (2026-09-08 추가, 기획 §12-2. 계약 변경 없음)**
+
+- 묶음 악보의 **난이도와 쪽수는 곡 하나가 아니라 묶음 전체의 값**이다. 그대로 두면 "달빛"을 찾은 레슨생이 `고급 · 62쪽`(= 베르가마스크 모음곡 4곡)을 보고 **못 치는 곡이라 판단하고 창을 닫는다.** 실제 달빛 단독은 중급이다.
+- 판정 근거는 이미 있는 `scopeNote.codes ∋ COLLECTION` 하나다. **필드를 새로 만들지 않는다** — "N곡 묶음"에 필요하던 `collectionPieceCount`·`collectionUnit` 은 기획 §12-2 가 **2차로 미뤘다.**
+- 화면 규칙(곡 카드 `full` — §3-1 검색 결과 · §3-8 작곡가 상세): 난이도 칩과 쪽수가 **같은 줄**에 있으므로 `(전곡 기준)` 은 그 줄 끝에 **한 번만** 붙인다 → `고급 · 62쪽 (전곡 기준)`. 쪽수가 없으면 난이도 뒤에 붙는다(난이도에도 똑같이 걸리는 꼬리표다).
+- `COLLECTION` 이 없으면(= 수록곡 안내가 빈 곡) **붙이지 않는다.** 시스템은 그 곡이 묶음인지 모른다 — 아는 사람(관리자)이 §4-8 `collectionGuide` 를 채우면 그 순간 복구된다.
+- 곡 카드 `compact`(홈 인기곡·같은 작곡가의 다른 곡)와 곡 상세 화면은 **이번 범위 밖**이다(기획 §12-3 이 검색 결과·작곡가 상세만 지정했다). designer 가 정해 주면 같은 규칙을 확장한다.
+- 계약 검증: `WorkCard.test.jsx`.
+
 > **왜 필드가 하나인가 (기획 §11-2).** 사용자에게 이 줄은 **"받는 게 찾은 것과 다르다"** 는 한 가지 정보다 —
 > 묶음은 "더 크다"(찾은 곡이 그 안에 들어 있다), 편곡·악장은 "작거나 다르다". 방향만 반대일 뿐 같은 질문의 답이라
 > 화면에서 같은 자리·같은 줄을 쓴다(기획 §2 F2-5). 필드를 둘로 쪼개면 세 스택이 "둘 다일 때 어느 줄이 먼저인가"를
@@ -298,7 +322,7 @@
 | pageCount | int\|null | |
 | fileSize | long\|null | 파일 없으면 null |
 | hasFile | boolean | `pdfFileId != null` |
-| previewUrl | string\|null | |
+| previewUrl | string\|null | **`koreaCopyright == FREE && previewFileId != null` 일 때만** 값이 있다. 그 밖에는 null (2026-09-08, 기획 §F3-6 · §0-4). 관리 응답 `AdminEditionDTO`(§4-7 · §5-4)는 **판정과 무관하게 그대로** — 판정 근거가 미리보기다 |
 | publisher, publishYear, plateNumber, editor, arranger, scanner | string\|null (publishYear 는 int\|null) | 있는 것만 표시 |
 | koreaCopyright | `FREE\|RESTRICTED\|UNKNOWN` | 뱃지 |
 | imslpCopyrightText | string\|null | "IMSLP 표기: …" |
@@ -307,6 +331,15 @@
 | downloadable | boolean | `hasFile && koreaCopyright == FREE` — 버튼 활성 기준 |
 | largeFile | boolean | `fileSize >= 20MB`(20 × 1024 × 1024) — 경고 문구 |
 | downloadUrl | string\|null | downloadable 일 때 `/api/editions/{id}/download`, 아니면 null |
+
+> **`previewUrl == null` 의 두 가지 이유를 화면은 `koreaCopyright` 로 가른다 (2026-09-08).**
+> 기획 §5 예외표가 문구를 다르게 정했다 — 파일이 없으면 **"미리보기 준비 중"**, 판정이 안 끝났으면
+> **"저작권을 확인하는 중이라 미리보기도 아직 보여드릴 수 없어요"**. 이유를 알려주는 **별도 필드는 두지 않는다**:
+> `koreaCopyright` 가 이미 그 답이고, 필드를 하나 더 두면 두 값이 어긋날 때 어느 쪽이 참인지 아무도 모른다.
+> 규칙: `koreaCopyright !== "FREE"` → 저작권 문구, 그 밖 → "미리보기 준비 중".
+> "다른 판본" **줄(row)** 에서는 이 문구를 반복하지 않는다 — 같은 줄의 저작권 뱃지가 이미 그 사실을 말하고,
+> 긴 문구를 작은 썸네일 자리에 넣으면 줄이 깨진다. 문구는 **추천 판본 카드에서만** 보인다.
+> 계약 검증: `WorkDetailPage.previewGate.test.jsx`, `EditionPreviewExposureIntegrationTest`.
 
 ---
 
@@ -390,30 +423,39 @@
 | imslpUrl | string\|null | "출처: IMSLP — 원본 페이지 보기" |
 | composerImslpUrl | string\|null | |
 | recommendedEdition | EditionDTO\|null | |
-| otherEditions | EditionDTO[] | 추천 제외. **파일 있는 판본 전부(편성 무관) + 파일 없는 `kind=COMPLETE_SCORE` 최대 5개**(2026-09-07 개정 → 2026-09-08 편성 조건 추가 — 아래). 각 구간 안 정렬 `imslp_download_count DESC NULLS LAST, id ASC`, 파일 있는 구간이 앞 |
-| otherEditionsTotal | int | **2026-09-07 추가.** 추천을 뺀 판본 중 **목록과 같은 모집단**의 수 = 파일 있는 것 전부 + 파일 없는 `COMPLETE_SCORE`. `otherEditions.length` 보다 크면 목록이 잘린 것이다 |
-| downloadableOtherCount | int | **전체** 판본 중 downloadable=true 수(잘린 목록 기준이 아니다) — "바로 받을 수 있는 다른 판본이 N개 있어요" |
+| otherEditions | EditionDTO[] | 추천 제외, **파일 있는 판본 전부**(편성 무관). 정렬 `imslp_download_count DESC NULLS LAST, id ASC`. 상한 없음 — 개수는 우리가 통제한다(곡당 최대 2개, 01 §9-1) |
+| imslpOnlyCount | int | **2026-09-08 신설.** 추천을 뺀 판본 중 **파일 없는 것의 수**(편성 무관). 화면의 "IMSLP 에는 이 곡의 다른 악보가 N개 더 있어요" 한 줄이 쓰는 값. 0 이면 줄을 만들지 않는다 |
+| imslpCandidateEdition | EditionDTO\|null | **2026-09-08 신설(기획 §F3-7 · §10-5).** `recommendedEdition == null` 일 때만 값이 있다. 아래 3-3-2 |
+| downloadableOtherCount | int | **전체** 판본 중 downloadable=true 수 — "바로 받을 수 있는 다른 판본이 N개 있어요" |
 
-> **왜 전량을 안 주는가 (2026-09-07 개정, senior-dev).** 설계는 "곡당 판본 몇 개"를 전제로 전량을 내려보냈는데,
-> 실제 수집 결과는 **곡 1개당 판본 70개**(20곡 1,792개)다. 그중 우리가 파일을 받는 것은 곡당 최대 2개(01 §9-1)이므로
-> 전량을 주면 사용자 화면에 `파일 없음 · IMSLP에서 보기` 행이 68줄 깔린다 — 응답이 수십 KB 로 부풀 뿐 아니라
-> **"판본 고민 없이 1개"** 라는 제품 약속과 정면으로 어긋난다. 그래서 (1) 우리가 실제로 줄 수 있는 판본(파일 있음)은
-> 전부 내려보내고 — 개수는 우리가 통제하므로 상한이 필요 없다 —, (2) "IMSLP 에 가면 더 있다"는 정보는
-> 파일 없는 판본 상위 5개 + `otherEditionsTotal` 숫자로 대신한다.
-> 화면(03 §3-3)의 접이식 헤더 개수는 `otherEditions.length`, 잘렸을 때의 안내(`… 외 N개는 IMSLP에서`)는
-> `otherEditionsTotal - otherEditions.length` 로 만든다. 계약 검증: `WorkDetailEditionVolumeIntegrationTest`.
+> **줄로 펼치는 것은 "우리가 파일을 가진 판본" 뿐이다 (2026-09-08 계약 통일, senior-dev — qa 4차 결함 4).**
+> 그 전까지 계약(2026-09-07·09-08)은 "파일 있는 판본 전부 + 파일 없는 `COMPLETE_SCORE` 최대 5개 + `otherEditionsTotal`" 이었고,
+> 기획 §F3-4 는 "줄은 파일 있는 판본만, 나머지는 개수 한 줄" 이었다 — **계약과 기획이 서로 다른 말을 했다.** 기획을 따른다.
+> - 그 5칸의 유일한 용도가 "IMSLP 에 더 있다" 는 **안내**인데, 같은 정보를 **숫자 한 줄이 더 정확히** 전한다.
+>   5줄은 "88개 중 5개" 라는 사실을 말할 수 없다.
+> - 그 5줄은 **누를 수 없는 줄**이다(파일이 없으니 버튼이 "IMSLP에서 보기"). 행동이 다른 줄을 같은 목록에 섞으면
+>   접이식 헤더의 "(N개)" 가 "받을 수 있는 판본 수" 가 아니게 된다 — **헤더 숫자가 거짓말을 한다.**
+> - 원래 근거(안내용 5칸)는 이미 2026-09-08 편성 필터에서 반쯤 무너졌다. 5칸을 정확히 만들려고 `kind` 를 걸렀지만
+>   걸러도 "파일 없음" 줄인 것은 같다. **규칙을 덧대는 대신 없앤다.**
+> - 실측(qa 4차): 프론트는 `otherEditionsTotal` 을 아예 쓰지 않는다. 지금 화면에는 파일 없는 5줄만 있고 안내 줄은 없다 —
+>   **두 설계의 나쁜 점만** 남아 있었다.
 >
-> **파일 없는 구간은 `kind = COMPLETE_SCORE` 만 담는다 (2026-09-08 개정, senior-dev — qa 3차 결함 5).**
-> 실측이 위 가정보다 컸다: 곡당 판본 **최대 207개·평균 79.8개**(응답 127KB)이고 그중 **73~83%가 `ARRANGEMENT`(편곡)** 다.
-> 이 목록의 유일한 용도는 "IMSLP 에 가면 더 있다" 는 **안내**인데, 그 5칸이 기타·성악·2대 피아노 편곡 스캔으로 채워지면
-> 1차 범위가 **피아노 독주**(기획 §0-2)인 제품에서 **안내 자체가 틀린 정보**가 된다. `PARTS`(파트보)도 뺀다 —
-> 파트보가 있다는 건 애초에 앙상블 곡이라는 뜻이다.
-> - **파일 있는 판본은 편성과 무관하게 전부 남긴다** — 우리가 실제로 줄 수 있는 것이고, 편곡에 파일이 붙어 있다면
->   관리자가 의도해 붙인 것이다(수집 자동 지정은 `COMPLETE_SCORE` 만 고른다 — 01_ERD §3-3).
-> - **`otherEditionsTotal` 도 같은 모집단**으로 센다. 화면은 `total - length` 로 "… 외 N개" 를 만드는데(위),
->   모집단이 다르면 그 뺄셈이 뜻을 잃는다. `downloadableOtherCount` 는 파일 있는 판본 기준이라 영향이 없다.
+> **바뀐 것**
+> - `otherEditions` = 추천 제외 · **파일 있는 판본 전부**(편성 무관). 잘리지 않는다.
+> - `otherEditionsTotal` **삭제** — 새 규칙에서는 언제나 `otherEditions.length` 와 같다. 길이와 늘 같은 필드는 잡음이고,
+>   없어진 "잘림" 개념을 화면이 다시 계산하게 만든다.
+> - `imslpOnlyCount` **신설** = 추천 제외 · 파일 없는 판본 수. **편성으로 거르지 않는다** — 이 숫자는 IMSLP **작품 페이지**로
+>   보내는 링크의 개수 안내이고, 그 페이지에 실제로 있는 것은 편곡·파트보를 포함한 전부다. 걸러 세면 사용자가 링크를
+>   눌러 보는 것과 어긋난다(목록은 *무엇을 보여줄지*의 문제였고, 숫자는 *거기 몇 개가 있는지*의 문제다).
 > - **관리 화면(§4-7)은 그대로 전부 보여 준다** — 관리자는 편곡·파트보도 저작권 판정과 추천 후보 판단을 해야 한다.
-> - 계약 검증: `WorkDetailEditionKindFilterIntegrationTest`.
+> - 화면(기획 §F3-4): 접이식 헤더 개수 = `otherEditions.length`, 접힌 영역 맨 아래 회색 한 줄 =
+>   "IMSLP 에는 이 곡의 다른 악보가 `imslpOnlyCount`개 더 있어요 — IMSLP 에서 보기 ↗"(곡의 `imslpUrl`, 새 탭).
+>   파일 있는 다른 판본이 0개면 안내 한 줄만, `imslpOnlyCount == 0` 이면 영역 자체를 만들지 않는다.
+> - 계약 검증: `WorkDetailEditionVolumeIntegrationTest`, `WorkDetailEditionKindFilterIntegrationTest`,
+>   `WorkDetailPage.otherEditions.test.jsx`.
+>
+> **열린 문구 하나(기획 §10-10)** — "N개"의 숫자를 화면에 그대로 보일지는 designer·product-planner 의 결정이다.
+> 계약은 숫자를 **주고**, 쓸지 말지는 화면이 정한다(0 인지 아닌지는 어느 쪽이든 필요하다).
 | sameComposerWorks | WorkSummaryDTO[] | 같은 작곡가의 다른 공개 곡, download_count DESC, 최대 5 |
 
 ```json
@@ -432,10 +474,27 @@
     "koreaCopyright": "FREE", "imslpCopyrightText": "Public Domain", "ccLicenseName": null, "ccAttribution": null,
     "imslpFileUrl": "https://imslp.org/wiki/Special:ImagefromIndex/00014",
     "downloadable": true, "largeFile": false, "downloadUrl": "/api/editions/301/download" },
-  "otherEditions": [ ], "otherEditionsTotal": 0, "downloadableOtherCount": 0,
+  "otherEditions": [ ], "imslpOnlyCount": 88, "imslpCandidateEdition": null, "downloadableOtherCount": 0,
   "sameComposerWorks": [ WorkSummaryDTO… ]
 } }
 ```
+
+#### 3-3-2. `imslpCandidateEdition` — 못 주는 곡이 내보내는 IMSLP 링크 (2026-09-08 신설, 기획 §F3-7 · §10-5)
+
+기획 §10-5 는 준비 중·이용 제한·확인 중인 곡의 대안 링크를 IMSLP **작품 페이지**에서 **우리가 고른 판본의 파일 페이지**로
+바꿨다 — 작품 페이지로 보내면 사용자를 "판본 70개 중 고르기" 앞에 그대로 내려놓기 때문이다. 그런데 준비 중 곡은 추천이 없고
+`otherEditions` 는 파일 있는 판본만 담으므로 **화면이 그 링크를 만들 재료가 없었다**(qa 4차 결함 9).
+
+- **언제 값이 있나** — `recommendedEdition == null` 일 때만. 추천이 있으면(이용 제한·확인 중이어도) 화면은 추천 카드의
+  `imslpFileUrl` 을 쓴다. 두 자리에서 같은 링크를 만들 수 있으면 어느 쪽을 쓸지 화면마다 갈린다.
+- **무엇을 고르나** — `kind = COMPLETE_SCORE` 이고 `scope = COMPLETE` 인 판본 중 `imslp_download_count DESC NULLS LAST, id ASC`
+  첫 번째. **파일 유무는 보지 않는다**(01 §3-3 추천 후보 규칙에서 파일 조건만 뺀 것 — 준비 중 곡에는 파일이 없다).
+- **없으면 null** — 전체 악보·전곡 판본이 하나도 없으면(편곡뿐이거나 판본 0개) null 이고, 화면은 **그때만** `imslpUrl`(작품 페이지)로
+  폴백한다(기획 §F3-7 "그 판본조차 없으면 작품 페이지"). 편곡을 "우리가 고른 판본" 이라며 내보내지 않는다 — 1차 범위는 피아노 독주다.
+- **타입은 `EditionDTO`** — 화면 문구가 "IMSLP 에서 이 판본 보기 ↗ — 전체 악보 · 전곡 · 12쪽 · Breitkopf 1862" 라서
+  kind·scope·pageCount·publisher 가 다 필요하다. 파일이 없으므로 `hasFile=false`, `downloadable=false`, `downloadUrl=null` —
+  **이걸로 다운로드 버튼을 만들면 안 된다.**
+- 계약 검증: `WorkDetailImslpCandidateIntegrationTest`.
 
 ### 3-4. `GET /api/editions/{id}/download` — PDF 다운로드
 
@@ -447,9 +506,31 @@
 | files 행은 있는데 바이트를 못 읽음 | 503 `FILE_UNAVAILABLE` — **다운로드 수 안 올림** |
 | 정상 | 200, `Content-Type: application/pdf`, `Content-Length`, `Content-Disposition: attachment; filename="score-{editionId}.pdf"; filename*=UTF-8''{퍼센트인코딩 파일명}` |
 
-**파일명 규칙(01 §9 8-9 확정, 2026-09-08 접미사 추가)**: `{작곡가 한글 표기 또는 원어 표기} - {한국어 대표 제목 또는 원어 제목}{ (대표 작품번호)}{ 편곡}{ N악장}.pdf`
-- 대표 작품번호 = `sort_order = 0`. 작품번호 없으면 괄호째 생략 → `사티 - 짐노페디.pdf`
-- 한국어 제목 없으면 원어 제목, 작곡가 한글 없으면 원어 표기.
+**파일명 규칙(01 §9 8-9 확정, 2026-09-08 접미사 추가, 2026-09-08 괄호 생략 3조건 확정 — 기획 01 §12-1)**: `{작곡가 한글 표기 또는 원어 표기} - {한국어 대표 제목 또는 원어 제목}{ (대표 작품번호)}{ 편곡}{ N악장}.pdf`
+- **빈 값은 원어로 대체한다** — 한국어 제목 없으면 원어 제목, 작곡가 한글 없으면 원어 표기. (수집·직접 등록으로 한글 값이 없는 곡도 다운로드가 열린다.)
+- 대표 작품번호 = `sort_order = 0`.
+- **괄호는 "제목이 말하지 않은 것"만 말한다 (2026-09-08 확정, 기획 §12-1).** 아래 3조건 중 하나라도 맞으면 **괄호를 통째로 생략**한다. 생략 결과에 **빈 괄호 `()` 는 어떤 경우에도 남지 않는다.**
+
+  | # | 조건 | 예 | 시드 50곡 |
+  |---|---|---|---|
+  | ① | 작품번호가 **없다** (`work_catalog_number` 0행이거나 값이 공백뿐) | `사티 - 짐노페디.pdf` | 4곡 (#2·#14·#34·#35) |
+  | ② | **파일명에 실제로 쓰인 제목**에 그 작품번호가 이미 들어 있다 | `쇼팽 - 녹턴 Op.9.pdf` | 12곡 (#11·#12·#23·#24·#25·#30·#39·#42·#43·#47·#48·#49) |
+  | ③ | 작품번호 행이 **2개 이상**이거나, 대표 작품번호 값 안에 **여는 괄호 `(`** 가 있다 | `멘델스존 - 무언가 (전곡).pdf` | 5곡 (#28·#31·#32·#43·#50) |
+
+  **②의 비교 규칙 (계약)**
+  - 비교 대상은 **파일명에 실제로 쓰인 제목**이다 — `titleKo` 가 비어 원어 제목을 썼으면 원어 제목과 비교한다.
+  - 제목·작품번호를 각각 `SearchNormalizer.normalize`(01_ERD §2 — 소문자화·발음구별기호 제거·문자/숫자 이외 제거)로 정규화한 뒤 **부분 문자열 포함**으로 판정한다. `Op.9` · `Op. 9` · `op9` 는 같다.
+  - **경계 검사**: 정규화된 제목에서 찾은 위치의 **바로 뒤 문자가 숫자면 포함으로 보지 않는다.** 제목 `연습곡 Op.10`(`연습곡op10`)은 작품번호 `Op.1`(`op1`)을 담고 있는 것이 아니다. 다른 번호에 걸치면 사용자는 파일 이름만 보고 곡을 잘못 고른다.
+  - **앞쪽에는 경계 검사를 두지 않는다.** 정규화가 구분자를 지우므로 매치 앞이 숫자인 것은 정상 상황이다 — #43 `즉흥곡 Op.90 (D.899)`(`즉흥곡op90d899`) + 대표 작품번호 `D.899`(`d899`) 가 그 예이고, 앞을 막으면 지워야 할 괄호가 남는다. 뒤만 막는 이유는 **번호를 늘리는 것은 뒤에 붙는 숫자뿐**이기 때문이다.
+  - 정규화는 **비교에만** 쓴다. 출력 문자열은 원문 그대로다(악센트·괄호·대소문자 유지).
+  - 금지문자 치환·공백 정리 전후 어느 값으로 비교해도 결과가 같다(정규화가 두 처리 결과를 같은 문자열로 만든다).
+  - **생략하지 않는 경계(기획 §12-1-3)**: 제목 `녹턴 Op.9` + 대표 작품번호 `Op.9 No.2` → `쇼팽 - 녹턴 Op.9 (Op.9 No.2).pdf`. 뒤 괄호가 범위를 **좁혀 주므로** 남긴다. "겹치는 부분만 잘라 `(No.2)`" 같은 두 번째 규칙은 두지 않는다.
+
+  **③의 구현 위치**: "여러 개"는 값 하나로 알 수 없으므로 **호출자(`DownloadMetaReader` / `WorkEntity`)** 가 판정해 `DownloadFileName.build(...)` 에 **생략이면 `null`** 을 넘긴다. `DownloadFileName` 의 시그니처는 바뀌지 않는다(①②·경계는 `DownloadFileName` 안에서 판정).
+
+  **접미사와의 관계**: `편곡`·`N악장` 접미사는 **괄호 생략 여부와 무관하게 그대로 붙는다** → `쇼팽 - 녹턴 Op.9 편곡 2악장.pdf`.
+  **길이 상한과의 관계**: 아래 204바이트 규칙은 **괄호 생략을 마친 이름**에 적용한다(생략은 이름을 짧게만 하므로 순서가 바뀌어도 결과가 같다).
+  계약 검증: `DownloadFileNameTest`(①②·경계), `DownloadCatalogOmissionIntegrationTest`(③과 전 조건의 왕복).
 - **범위·편곡 접미사 (2026-09-08 추가, 기획 §11-2 ③)** — 추천 판본이 전곡·전체 악보가 아니면 그 사실을 이름 끝에 붙인다. 파일은 사용자 컴퓨터에 남아 몇 주 뒤에 열리고, **그때 화면은 없고 파일 이름만 있다.**
 
   | 판본 | 붙이는 것 | 예 |
@@ -529,6 +610,7 @@
 ```json
 { "data": {
   "totalWorks": 312, "readyWorks": 241, "preparingWorks": 38, "needsWorkWorks": 57,
+  "needsRecommendationReviewWorks": 12,
   "unknownCopyrightEditions": 19, "monthlyDownloads": 1204,
   "latestJob": CrawlJobDTO | null,
   "activeJob":  CrawlJobDTO | null
@@ -538,6 +620,12 @@
 - **`needsWorkWorks` 는 01_ERD §4 "보완 필요 계산" 을 그대로 쓴다 — `COPYRIGHT_JUDGMENT` 포함**(2026-09-08, 기획 §11-1). 곡 목록 필터 `status=NEEDS_WORK`(§4-6) · 곡 상세 `missing[]`(§4-7) 과 **반드시 같은 규칙**이다. 세 곳이 한 함수를 공유해야 하고, 한 곳에서 사라진 곡이 다른 곳에 남으면 결함이다.
 - **자동 판정 되돌리기(§5-12) 뒤 카드가 어떻게 움직이는가** (2026-09-08 명시): `readyWorks`·`needsWorkWorks`·`unknownCopyrightEditions` 는 **자동 판정 실행 전 값으로 돌아온다**. 다만 `preparingWorks` 는 돌아오지 않는다 — 되돌리기는 추천 지정을 유지하므로 그 곡의 상태가 `PREPARING` 이 아니라 `UNKNOWN` 이기 때문이다. 그래서 그 곡을 관리자 일감에 남기는 일은 `needsWorkWorks` 가 맡는다(그게 `COPYRIGHT_JUDGMENT` 를 추가한 이유다).
 - **`monthlyDownloads` 는 판본을 지워도 줄지 않는다**(§5-5, 2026-09-08). 이 숫자는 "이번 달에 몇 번 받아갔나" 라는 **일어난 사건의 수**이고, 같은 달 수치가 나중에 줄어들면 지표가 아니다. 곡 삭제(§4-9)로만 줄어든다.
+- **`needsRecommendationReviewWorks`(2026-09-08 신설, 기획 §F6-4 · §8-17 · §10-8)** — 화면 문구 "추천 판본 확인 필요 N곡".
+  `recommended_edition_id IS NOT NULL AND recommended_edition_reviewed = false` 인 곡 수, **숨김 곡 제외**.
+  숨김을 빼는 이유: 이 값은 공개(출시) 기준 §8-17 "추천 판본 미검수 0곡" 을 재는 지표이고, 숨긴 곡은 공개 대상이 아니다
+  (숨김을 포함하는 `totalWorks` 와 다른 이유다). 같은 모집단을 §4-6 `status=NEEDS_RECOMMENDATION_REVIEW` 목록이 쓴다 —
+  **카드 숫자와 목록이 어긋나면 관리자는 어느 쪽도 믿지 않는다.** 규칙·API 는 §5-6-1.
+  `needsWorkWorks`(보완 필요)와 **섞지 않는다** — 보완 필요는 "열어 주려면 뭐가 남았나"(기획 §11-1)이고 미검수 곡은 이미 열려 있다.
 - `latestJob` = 가장 최근 생성 작업, `activeJob` = RUNNING/PAUSED 작업(없으면 null).
 
 ### 4-2. `GET /api/admin/composers?q=&missingKo=&page=&size=`
@@ -571,13 +659,14 @@
 | 쿼리 | 값 |
 |---|---|
 | q | 사용자 검색과 같은 규칙(§3-1 2번), 숨김 포함, 정렬은 아래 |
-| status | `READY \| PREPARING \| RESTRICTED \| UNKNOWN \| NEEDS_WORK \| HIDDEN` 중 하나. `NEEDS_WORK` 는 01_ERD §4 보완 필요 계산(**`COPYRIGHT_JUDGMENT` 포함**, 2026-09-08) — 다른 값과 달리 `WorkStatus` 가 아니라서, `UNKNOWN` 곡이 `NEEDS_WORK` 목록에도 나오는 것이 정상이다 |
+| status | `READY \| PREPARING \| RESTRICTED \| UNKNOWN \| NEEDS_WORK \| NEEDS_RECOMMENDATION_REVIEW \| HIDDEN` 중 하나. `NEEDS_WORK` 는 01_ERD §4 보완 필요 계산(**`COPYRIGHT_JUDGMENT` 포함**, 2026-09-08) — 다른 값과 달리 `WorkStatus` 가 아니라서, `UNKNOWN` 곡이 `NEEDS_WORK` 목록에도 나오는 것이 정상이다. `NEEDS_RECOMMENDATION_REVIEW`(2026-09-08 신설)도 `WorkStatus` 가 아니며 §4-1 카드와 **같은 모집단**이다(추천 있음 + 미검수 + 숨김 제외) |
 | composerId | long |
 | level | `BEGINNER \| ELEMENTARY \| INTERMEDIATE \| ADVANCED \| NONE`(=미정) |
 | size | 선택. **기본 20, 최대 200**(초과는 200 으로 자름, 1 미만은 기본 20) — §4-2 와 같은 규칙 |
 정렬 `updated_at DESC, id DESC`. 응답 `{ "unfilteredTotal": 312, "works": PageResponse<AdminWorkSummaryDTO> }`
 
-`AdminWorkSummaryDTO`: `{ id, titleKo, titleOriginal, composer: ComposerRefDTO, catalogNumbers, level, editionCount, hasRecommended, status, needsWork, hidden, updatedAt }`
+`AdminWorkSummaryDTO`: `{ id, titleKo, titleOriginal, composer: ComposerRefDTO, catalogNumbers, level, editionCount, hasRecommended, recommendationReviewed, status, needsWork, hidden, updatedAt }`
+- `recommendationReviewed`(boolean, 2026-09-08 신설) — 목록의 "미검수" 표시. `hasRecommended == false` 인 곡은 항상 `false` 이고 표시하지 않는다(검수할 대상이 없다).
 
 ### 4-7. `GET /api/admin/works/{id}` — 곡 상세(관리)
 `AdminWorkDetailDTO`
@@ -591,7 +680,7 @@
   "imslpUrl": "https://imslp.org/wiki/Piano_Sonata_No.14,_Op.27_No.2_(Beethoven,_Ludwig_van)",
   "hidden": false, "hiddenReason": null,
   "status": "READY", "needsWork": false, "missing": [],
-  "recommendedEditionId": 301, "candidateEditionId": null,
+  "recommendedEditionId": 301, "candidateEditionId": null, "recommendationReviewed": false,
   "downloadCount": 312, "hasDownloadHistory": true,
   "editions": [ AdminEditionDTO… ],
   "createdAt": "2026-09-06T05:02:00Z", "updatedAt": "2026-09-06T05:02:00Z"
@@ -608,6 +697,7 @@
   고치는 방향은 **응답에 필드를 넣는 것**이지 "PUT 에서 빠지면 유지"가 아니다 — 후자는 값을 지울 방법을 없애고
   전체 교체 계약에 필드별 예외를 만든다. 계약 검증: `AdminWorkCollectionGuideIntegrationTest`.
 - `candidateEditionId`: 01_ERD §3-3 규칙(추천 없을 때만 값, 있으면 null).
+- `recommendationReviewed`(boolean, 2026-09-08 신설): 지금 추천 판본이 사람 눈을 통과했는가. 규칙·API 는 §5-6-1.
 - `editions` 정렬: 추천 → 추천 후보 → 파일 있음(imslp_download_count DESC) → 파일 없음(imslp_download_count DESC) → id.
 - 404 없는 id(숨김 곡은 관리자에게 보임).
 
@@ -761,6 +851,30 @@
 - **경고는 막지 않는다** — 200 으로 지정은 끝나 있고 경고는 안내다(기획 §11-2 "경고를 보고도 지정하면 그건 사람의 결정"). 파일 없는 판본만 400 으로 막는다(위 표).
 - 지정의 결과가 사용자에게 드러나는 곳은 세 군데다: 검색 항목 `scopeNote`(§2-2-1) · 곡 상세 `recommendedEdition.kind/scope`(§2-3, 이미 있다) · 다운로드 파일명 접미사(§3-4).
 - 계약 검증: `RecommendEditionWarningIntegrationTest`.
+- **지정·해제는 검수 상태를 초기화한다** — `recommended_edition_reviewed = false`(§5-6-1).
+
+### 5-6-1. `PUT /api/admin/works/{workId}/recommended-edition/review` — 추천 판본 확인함 (2026-09-08 신설)
+
+요청 `{ "reviewed": true }` → 200 `AdminWorkDetailDTO`(§4-7). `false` 로 되돌리기도 같은 API.
+
+| 조건 | 결과 |
+|---|---|
+| 곡 없음 | 404 `NOT_FOUND` |
+| 추천 판본이 없는 곡에 `reviewed: true` | 400 `VALIDATION_ERROR` — 확인할 대상이 없다 |
+| 정상 | 200 `AdminWorkDetailDTO`(화면이 다시 조회하지 않아도 되게 곡 상세 그대로) |
+
+**왜 이 계약이 필요한가 (기획 §F6-4 · §8-17 · §10-8, qa 4차 결함 6).** 자동 추천 지정은 "전체 악보 · 전곡" 만 보므로
+**관현악 총보가 추천이 될 수 있다**(파반느·사계·짐노페디·어린이 차지·꽃노래·엔터테이너 — 큐레이션 50곡의 실제 사례).
+그래서 기획은 "추천 판본의 미리보기를 열어 피아노 악보가 맞는지 확인 → **확인함**" 을 두고 **공개(출시) 기준**에
+"추천 판본 미검수 0곡" 을 넣었는데, 계약·코드·화면정의 어디에도 이 개념이 없었다 — **출시를 막는 조건인데 셀 수 없는 숫자**였다.
+
+- **저장**(01_ERD `work`): `recommended_edition_reviewed BOOLEAN NOT NULL DEFAULT FALSE`. "누가·언제" 는 남기지 않는다 —
+  이 값이 답하는 질문은 "지금 추천이 사람 눈을 통과했나" 하나뿐이고, 그 답은 추천이 바뀌는 순간 무효가 되므로 이력이 아니라 상태다.
+- **false 로 돌아가는 때**: 추천이 **바뀌거나 해제되면**(§5-6, §5-11 자동 지정 포함) 자동으로 false. 확인한 것은
+  "그 판본" 이 아니라 "지금 추천" 이다. 곡의 다른 필드 수정(§4-8)으로는 바뀌지 않는다.
+- 보이는 곳: §4-1 카드 `needsRecommendationReviewWorks` · §4-6 필터 `status=NEEDS_RECOMMENDATION_REVIEW` ·
+  §4-6 목록/§4-7 상세의 `recommendationReviewed`.
+- 계약 검증: `RecommendationReviewIntegrationTest`.
 
 ### 5-7. `POST /api/admin/editions/{id}/fetch-file` — IMSLP 파일 받아오기(비동기)
 | 조건 | 결과 |
@@ -793,7 +907,31 @@
   "autoJudgeSkipReason": "EDITOR_UNVERIFIABLE" }
 ```
 응답에 `unfilteredTotal`(전체 대기 수)도 포함: `{ "unfilteredTotal": 19, "editions": PageResponse<…> }`.
-- `autoJudgeSkipReason`(2026-09-07 추가): 지금 §5-11 자동 판정을 돌리면 **이 판본이 왜 자동으로 열리지 않는지**(기획 `02_저작권_판정_지침.md` 부록 A §A-1 표의 사유 코드 6종). 자동 판정으로 `FREE` 가 될 수 있는 판본이면 `null`. 관리자가 "남은 일감이 어떤 종류인지"를 목록에서 바로 보게 하는 값이다. 계산만 하고 아무것도 바꾸지 않는다.
+- `autoJudgeSkipReason`(2026-09-07 추가): 지금 §5-11 자동 판정을 돌리면 **이 판본이 왜 자동으로 열리지 않는지**(기획 `02_저작권_판정_지침.md` 부록 A §A-1 표의 사유 코드 **5종** — 2026-09-08 정정, "6종" 은 오기였다. §A-1 에서 `UNKNOWN` 을 유지시키는 규칙은 1·2·3·6·8 이고 §5-11 `skipped` 배열도 5개다). 자동 판정으로 `FREE` 가 될 수 있는 판본이면 `null`. 관리자가 "남은 일감이 어떤 종류인지"를 목록에서 바로 보게 하는 값이다. 계산만 하고 아무것도 바꾸지 않는다.
+  - **사유는 "그 판본의 모든 문제"가 아니라 "제일 먼저 막은 하나"다** — §A-1 은 위에서부터 먼저 걸리는 곳에서 끝난다. 몰년도 없고 표기도 NC 인 판본의 사유는 `LICENSE_NOT_REDISTRIBUTABLE`(규칙 1)이지 `COMPOSER_DEATH_YEAR_UNKNOWN`(규칙 2)이 아니다.
+
+**화면 문구 확정 (2026-09-08, senior-dev — §7 이 "designer 에게 요청 필요" 로 열어 둔 건).**
+designer 로 넘기지 않았다. 새 문구를 짓는 일이 아니라 **이미 제품에 나가 있는 말을 한 벌로 묶는 일**이기 때문이다 —
+같은 5개 코드의 한국어 문구가 **같은 화면**(대기함 상단 자동 판정 미리보기 모달, §5-11 `skipped`)에 이미 나가고 있고,
+§7 도 예시로 `EDITOR_UNVERIFIABLE → "편집자 생몰 확인 필요"` 를 적어 두었다. 한 화면에서 같은 코드가 두 가지 말로 보이면
+관리자는 그 둘이 같은 것인지 알 수 없다. 표시의 목적("왜 이 판본은 자동으로 안 열렸나 → 그래서 내가 뭘 해야 하나")도
+문구의 멋이 아니라 **행동 구분**에 있다(몰년이 비었으면 작곡가를 고치면 다음 실행에 자동으로 열린다, §A-2 ②).
+
+| 코드 | 문구 |
+|---|---|
+| `LICENSE_NOT_REDISTRIBUTABLE` | 재배포 허용 라이선스가 아님 |
+| `COMPOSER_DEATH_YEAR_UNKNOWN` | 작곡가 몰년을 모름 |
+| `COMPOSER_COPYRIGHT_ACTIVE` | 작곡가 사후 70년 미경과 |
+| `PUBLICATION_TOO_RECENT` | 출판 70년 미경과 |
+| `EDITOR_UNVERIFIABLE` | 편집자 생몰 확인 필요 |
+
+- `null` 이면 **아무 말도 만들지 않는다**(자동 판정을 돌리면 열릴 판본이다). 모르는 코드가 오면 **코드를 그대로 보인다** —
+  빈 문자열로 삼키면 새 사유가 생겼을 때 관리자의 일감 하나가 설명 없이 사라진다.
+- **문구 표는 한 벌만 둔다**: `frontend/src/lib/format.js` 의 `formatAutoJudgeSkipReason()`(이 프로젝트에서 enum → 문구
+  변환이 사는 자리 — `formatWorkStatus`·`formatCrawlJobStatus`·`formatRecommendWarning` 과 같은 곳). 미리보기 모달
+  (`AutoJudgePanel.jsx`)도 자기 안의 `SKIP_LABELS` 를 버리고 이 함수를 쓴다. 표가 두 벌이면 다음에 한쪽만 고쳐진다.
+- designer 에게 열려 있는 것은 **문구가 아니라 행 안에서의 표현**(자리·색·아이콘)이다 — §8 되돌림 참고.
+- 계약 검증(Red): `frontend/src/lib/format.autoJudge.test.js`, `frontend/src/pages/admin/CopyrightPendingPage.skipReason.test.jsx`.
 - `imslpLicenseCode` 는 **이 응답에 넣지 않는다**(2026-09-07 정정, senior-dev — 예시에만 있고 DTO 에는 없던 불일치를 예시를 빼는 쪽으로 맞춘다). 화면정의 06-C 대기함 표의 열은 "IMSLP 표기 **원문** + 파일 페이지 링크" 라 관리자가 보는 건 `imslpCopyrightText` 이고, 코드는 그 원문의 정규화 캐시(§5-2)일 뿐이라 같은 행에서 새로 알려주는 정보가 없다. 코드 기반 판단의 결과는 이미 `autoJudgeSkipReason` 의 `LICENSE_NOT_REDISTRIBUTABLE` 로 사람 말이 되어 나간다. 화면이 실제로 코드를 필요로 하게 되면 그때 계약에 추가한다(쓰는 곳 없는 필드를 계약에 두면 세 스택이 각자 다르게 해석한다).
 
 ### 5-9. `PUT /api/admin/editions/{id}/copyright`
@@ -840,6 +978,8 @@
 그 곡의 판본 중 `kind = COMPLETE_SCORE AND scope = COMPLETE AND pdf_file_id IS NOT NULL AND korea_copyright = FREE` 인 것을
 `imslp_download_count DESC NULLS LAST, id ASC` 로 정렬해 첫 번째를 추천으로 지정한다(01_ERD §3-3 의 "추천 후보" 정의에
 `korea_copyright = FREE` 조건을 더한 것). **이미 추천이 있는 곡은 건드리지 않는다.**
+자동으로 지정된 곡은 `recommended_edition_reviewed = false` 다(§5-6-1) — **이 자동 지정이 관현악 총보를 추천으로 앉힐 수 있다는 것이
+바로 검수 개념을 만든 이유다**(기획 §10-8). 그래서 자동 판정을 돌리면 §4-1 의 "추천 판본 확인 필요" 숫자가 그만큼 올라간다.
 > 왜 같은 API 에 넣는가: 판정만 하면 `recommendedEditionId` 가 없어 곡이 계속 `PREPARING` 이라 **다운로드 가능한 곡은 여전히 0개**다.
 > 두 단계를 따로 두면 관리자가 절반만 실행한 상태가 생긴다. 다만 관리자가 추천을 손으로 관리하고 싶을 수 있으니 끌 수 있는 스위치로 둔다.
 
@@ -1089,7 +1229,7 @@ harpsichord/keyboard 로 분류하는데, 인벤션·평균율·안나 막달레
 | 작곡가 관리 | §4-2 ~ 4-5 |
 | 곡 관리 / 편집 | §4-6 ~ 4-10, 판본 §5 |
 | 판본 모달 | 업로드 §5-1 → 저장 §5-2/5-3(fileId 전달) |
-| 대기함 | §5-8 ~ 5-12. 상단에 **"자동 판정 실행"** — 먼저 `dryRun: true` 로 미리보기(규칙별·사유별 숫자 확인 모달) → 확인 누르면 `dryRun: false`. 실행 뒤 **"자동 판정 되돌리기"**(§5-12) 버튼이 보인다. 목록 각 행에는 `autoJudgeSkipReason` 을 사람 말로 바꿔 표시(예: `EDITOR_UNVERIFIABLE` → "편집자 생몰 확인 필요") — designer 에게 문구 요청 필요 |
+| 대기함 | §5-8 ~ 5-12. 상단에 **"자동 판정 실행"** — 먼저 `dryRun: true` 로 미리보기(규칙별·사유별 숫자 확인 모달) → 확인 누르면 `dryRun: false`. 실행 뒤 **"자동 판정 되돌리기"**(§5-12) 버튼이 보인다. 목록 각 행에는 `autoJudgeSkipReason` 을 사람 말로 바꿔 표시 — **문구는 §5-8 표로 확정**(2026-09-08 senior-dev, `formatAutoJudgeSkipReason()` 한 벌). designer 에게 남은 것은 행 안에서의 자리·색·아이콘뿐이다 |
 | 수집 관리 / 진행 | §6-1 → 6-2 → 6-6 을 10초 폴링(RUNNING/PAUSED 일 때만) |
 
 프론트 호출 헬퍼: 공개는 `callPublicApi`, 관리는 `callApi`(토큰 갱신 포함), 업로드는 `authFetch` + FormData(기존 `uploadFiles` 는 `/api/files` 전용이라 `uploadEditionFile` 헬퍼를 `lib/http.js` 에 추가).
@@ -1109,6 +1249,14 @@ harpsichord/keyboard 로 분류하는데, 인벤션·평균율·안나 막달레
 | ~~product-planner~~ | ~~인기곡 정렬 "기록 없으면 최근 등록순"~~ | **해소(2026-09-08)** — 기획 §11-3 이 최근 등록순을 폐기했다. 새 규칙은 §3-2 |
 | product-planner (2026-09-08) | 기획 §2 F2-5 의 난이도 "(전곡 기준)" · 쪽수 옆 "**N곡 묶음**" 은 **곡 수(숫자)** 를 요구하는데, 시드로 들어오는 값은 문장(`collection_guide`) 하나뿐이라 숫자를 뽑을 수 없다 | 이번 계약은 `scopeNote.codes` 에 `COLLECTION`(묶음 여부) 까지만 넣었다. 숫자가 필요하면 `works.csv` 에 `collection_piece_count` 열을 더하고 `WorkSummaryDTO` 에 필드를 추가해야 한다 — **기획이 "필요하다"고 확인해 주면** 그때 계약에 넣는다(쓰는 곳 없는 필드를 먼저 두지 않는다) |
 | ↑ 기술 정리 (senior-dev 2026-09-08) | **둘은 서로 다른 요구다.** ⑴ 난이도 "(전곡 기준)"은 숫자가 필요 없다 — **묶음 여부만** 있으면 되고 그건 이미 `scopeNote.codes ∋ COLLECTION` 으로 계약·구현에 있다(오늘 화면이 바로 붙일 수 있다). ⑵ "N곡 묶음"만 숫자를 요구한다 | **문장 파싱은 불가**하다: 시드 38건의 실제 문구가 `왈츠 3곡`·`연습곡 106곡`·**`3개 악장`(5건 — 곡이 아니라 악장이다)**·`8권 48곡`(숫자 둘)·`프렐류드와 푸가가 이어서`(숫자 없음)로 섞여 있어, 숫자를 뽑아도 **단위가 다르고 어느 숫자인지도 정해지지 않는다**("3곡 묶음"이라고 쓰면 틀린 말이 된다). 필요한 것은 값 **두 개**: `collectionPieceCount:int` + `collectionUnit:PIECE\|MOVEMENT`(서버가 문구를 만들지 않는다는 §2-2 원칙 유지 — 화면이 "3곡 묶음"/"3개 악장"을 조립). 작업량은 `collection_guide` 와 같은 경로 그대로: `works.csv` 열 2개 → `work` 컬럼 2개(nullable=추가형이라 마이그레이션 없음) → 01_ERD §6 백필 1회(이미 적재된 시드 곡은 그냥 두면 영원히 NULL) → `WorkSummaryDTO` 필드 2개. **기획이 정해 줄 것: 38곡의 숫자·단위 표(문장에서 옮겨 적으면 된다)와, 수집·관리자 등록 곡처럼 값이 없는 곡의 표시(줄 생략으로 충분한가)** |
+| ↑ **해소 (senior-dev 2026-09-08, 기획 §12-2 결론 반영)** | **계약 변경 없음.** 1차는 "(전곡 기준)" 만 넣고 "N곡 묶음" 은 2차로 미뤄졌으므로 `collectionPieceCount`·`collectionUnit` 은 **만들지 않는다**(쓰는 곳 없는 필드를 먼저 두지 않는다 — 위 판단 유지). "(전곡 기준)" 이 요구하는 값은 "이 곡이 묶음인가" 하나뿐이고 이미 `scopeNote.codes ∋ COLLECTION`(§2-2-1) 으로 내려가고 있다 | 남은 것은 **화면 문구**다: 곡 카드(full)의 난이도·쪽수 줄 끝에 `(전곡 기준)` 을 **한 번만** 붙인다(§2-2-1 아래 화면 규칙). Red: `WorkCard.test.jsx`. compact 변형(홈 인기곡·같은 작곡가의 다른 곡)과 곡 상세는 **이번 범위 밖** — designer 확인 대기 |
 | product-planner (2026-09-08) | 기획 §10-6 "한국어 제목에 이미 작품번호가 들어 있으면 괄호째 생략"이 **아직 계약·구현에 없다** — 지금도 `쇼팽 - Nocturnes, Op.9 (Op.9).pdf` 가 나온다(`DownloadFileNameTest` 가 그 값을 기대하고 있다) | 이번 §3-4 개정 범위(편곡·악장 접미사)와 별건이라 손대지 않았다. "제목에 작품번호가 들어 있다"의 판정 기준(정규화 비교? 부분 문자열?)을 정해야 계약이 되므로 별도 건으로 올린다 |
 | ↑ 기술 정리 (senior-dev 2026-09-08) | **시드 데이터에도 이미 있다** — `title_ko` 자체에 작품번호가 든 곡이 50곡 중 10곡이다(`녹턴 Op.9`, `왈츠 Op.64`, `소나티네 Op.36`, `즉흥곡 Op.90 (D.899)` …). 즉 titleKo 가 없어 원어 제목을 쓰는 곡(qa 예시)만의 문제가 아니라 **정상 곡에서도 `쇼팽 - 녹턴 Op.9 (Op.9).pdf` 가 된다.** qa 실측 42곡 중 11곡(26%) | 구현은 §3-4 파일명 조립에 조건 한 줄이면 된다(비용 작음). **기획이 정해 줄 것은 판정 규칙뿐**: ⓐ 비교 대상은 "파일명에 실제로 쓰인 제목"(한국어 없으면 원어) ⓑ 비교 방식은 `SearchNormalizer`(01_ERD §2) 정규화 후 **부분 문자열 포함**을 제안한다 — `Op.9`/`Op. 9`/`op9` 를 같게 본다 ⓒ **부분 일치의 경계**를 정해야 한다: 제목 `녹턴 Op.9` + 대표 작품번호 `Op.9 No.2` 는 포함이 아니라 `(Op.9 No.2)` 가 그대로 붙고, 반대로 제목 `Op.9 No.2` + 작품번호 `Op.9` 는 생략된다. **"제목이 작품번호보다 더 자세하면 생략, 덜 자세하면 유지"** 가 이 규칙의 실제 동작이며 이대로 좋은지 확인이 필요하다 ⓓ 확정되면 `DownloadFileNameTest` 기대값 갱신 + Red 추가는 senior-dev 가 한다 |
+| ↑ **해소 (senior-dev 2026-09-08, 기획 §12-1 결론 반영)** | 괄호 생략 3조건·빈 값 원어 대체를 §3-4 계약에 넣고 Red 를 박았다(`DownloadFileNameTest` 기대값 갱신 + `DownloadCatalogOmissionIntegrationTest` 신설). 판정은 `SearchNormalizer` 정규화 후 부분 문자열 포함 + **뒤 숫자 경계 검사** | **기획 §12-1 서술과 실데이터가 두 곳에서 어긋난다 — planner·qa 확인 필요.** ⑴ **#6 안나 막달레나**: 기획이 근거로 든 `BWV Anh.113–132 (1725년 수첩)` 는 `03` §1 표기이고, 시드(`works.csv`)에 실제로 들어 있는 값은 괄호 없는 `BWV Anh.113–132` 다. 그래서 ③이 걸리지 않고 `바흐 - 안나 막달레나 바흐를 위한 음악 수첩 (BWV Anh.113–132).pdf` 가 된다 — #16 인벤션 `(BWV 772–786)` 과 같은 모양이라 규칙상 일관되지만, `03` §11 이 적은 결과(괄호 없음)와는 다르다. 곡 데이터에 `(1725년 수첩)` 을 넣기로 하면 그 순간 ③이 걸려 기획대로 된다. ⑵ **#31·#32·#50 (드뷔시 3곡)**: 작품번호가 `CD 74`+`L.66` 처럼 **2행**이라 ③에 걸려 괄호가 사라진다(`드뷔시 - 두 개의 아라베스크.pdf`). `03` §11 은 이 3곡을 "나머지는 그대로" 로 적었다. 규칙 원문("작품번호가 여러 개이거나")을 그대로 구현한 결과이고 결과 문자열도 읽기 좋으므로 **규칙을 따랐다** — 세는 방법을 바꾸려면(예: 3개 이상일 때만) 기획이 되돌려 달라. 규칙을 둘로 만들지 않기 위해 임의 임계값은 두지 않았다 |
 | designer (05-E, 2026-09-08) | 화면 E "곡 등록·수정" 폼에 **`수록곡 안내`(`collectionGuide`) 칸이 없다.** §4-7 응답·§4-8 요청에는 있고 시드가 38곡에 채워 두었는데 화면이 다루지 않아, 관리자가 다른 칸만 고쳐 저장해도 **전체 교체 PUT 이 그 값을 null 로 덮는다**(백필도 안 되는 영구 유실 + 검색의 `scopeNote.COLLECTION` 줄 동반 소멸) | senior-dev 가 **입력 칸 있음**으로 잠정 확정하고 Red 를 박았다(`WorkFormPage.test.jsx` — 라벨 `수록곡 안내`, 왕복·비우면 null). 위치는 `악장 페이지 안내` 아래 제안, 컨트롤은 여러 줄 문장이므로 `textarea` 제안, 상한 500자(§0-6). **designer 가 정할 것: 라벨 문구 · 도움말 문구 · 컨트롤(`.form-input` 1줄 vs textarea) · 배치.** 라벨이 바뀌면 senior-dev 가 테스트를 맞춰 고친다 |
+| designer (03·06-A, 2026-09-08) | **"추천 판본 미검수" 가 화면정의 전체에 0건이다.** 기획 §F6-4·§8-17 이 인수 조건("미검수 0곡")으로 요구하는데 관리 홈 카드·곡 목록 뱃지·곡 편집의 "확인함" 버튼이 어느 정의서에도 없다 | 계약은 확정했다(§4-1 카드 `needsRecommendationReviewWorks`, §4-6 필터·목록 필드, §5-6-1 API). **화면 세 자리**(관리 홈 카드 / 곡 목록 "미검수" 뱃지 / 곡 편집 판본 목록의 "확인함" 토글)의 위치·문구를 정의서에 넣어 주면 그대로 붙는다 |
+| designer (05-D, 2026-09-08) | 화면정의 05 §D 의 **상태 필터 선택지가 7개(전체 + 6종)** 로 적혀 있어 §4-6 에 신설된 `NEEDS_RECOMMENDATION_REVIEW` 가 빠져 있다. 관리 홈 카드가 `?status=NEEDS_RECOMMENDATION_REVIEW` 로 보내는데 select 에 그 항목이 없으면 **서버 필터는 걸렸는데 화면은 "전체" 로 보인다**(관리자는 목록이 왜 짧은지 알 수 없다) | senior-dev 가 **문구 `추천 판본 확인 필요`** 로 잠정 확정하고 Red 를 박았다(`WorkAdminListPage.test.jsx` — 값·문구·순서를 목록으로 단언). 이 말을 고른 이유는 **관리 홈 카드(§4-1)와 같은 말**이어야 관리자가 자기가 누른 필터가 걸렸음을 알 수 있어서다. 순서는 §4-6 enum 순서(보완 필요 다음, 숨김 앞). 정의서 §D 표를 8개로 갱신해 달라 — 다른 문구를 원하면 되돌려 주면 테스트를 맞춰 고친다 |
+| designer (06-C, 2026-09-08) | 대기함 행별 `autoJudgeSkipReason` 표시가 정의서에 없다(§7 이 요구) | **문구는 §5-8 표로 확정**(근거는 그 절). designer 가 정할 것은 **행 안에서의 표현**뿐이다: 별도 열인가 편집자·IMSLP 표기 아래 보조 줄인가, 회색 텍스트인가 칩인가, 아이콘을 붙일 것인가. Red 는 "그 행 안에 그 말이 있다" 까지만 잠갔으므로(`CopyrightPendingPage.skipReason.test.jsx`) 어느 배치를 골라도 테스트는 그대로 쓴다 |
+| designer (03, 2026-09-08) | 곡 상세 "다른 판본" 영역 맨 아래 **"IMSLP 에는 이 곡의 다른 악보가 N개 더 있어요 — IMSLP 에서 보기 ↗"** 한 줄(기획 §F3-4)이 정의서에 없다 | 계약은 `imslpOnlyCount` 로 확정(§3-3). 파일 있는 판본 0개일 때는 접이식 헤더 없이 이 줄만, `imslpOnlyCount == 0` 이면 영역 자체 없음 — 이 두 상태의 시안이 필요하다 |
+| designer (03, 2026-09-08) | **판정 안 된 판본의 미리보기 문구를 "다른 판본" 줄에서도 보여줄지.** 기획 §5 예외표는 "곡 상세" 라고만 한다 | 잠정: **추천 판본 카드에서만** 회색 상자 + 문구를 보이고, 줄(row)에서는 썸네일 자리를 비운다. 근거는 같은 줄의 저작권 뱃지가 이미 그 사실을 말하고(중복), 긴 문구가 작은 썸네일 칸을 깨뜨린다는 것. 다르게 원하면 되돌려 달라 |
+| product-planner (2026-09-08) | 기획 §10-10 **"IMSLP 에 N개 더" 의 숫자를 그대로 보일지** 가 아직 열려 있다 | 계약은 숫자를 **주고**(`imslpOnlyCount`) 쓸지는 화면이 정한다. 숫자를 감추기로 해도 계약은 그대로면 된다(0 인지 아닌지는 어느 쪽이든 필요하다) |

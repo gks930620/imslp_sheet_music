@@ -118,6 +118,7 @@ normalize(s):
 | hidden | BOOLEAN | N | 기본 false. 숨김이면 사용자 화면 어디에도 안 나옴 |
 | hidden_reason | VARCHAR(30) | Y | enum `HiddenReason`: `NOT_PIANO_SOLO`(수집 자동 숨김). 관리자가 직접 숨기면 NULL |
 | recommended_edition_id | BIGINT FK→edition | Y | **추천 판본(곡당 0~1)**. 순환 FK 지만 Hibernate 가 테이블 생성 후 ALTER 로 제약을 건다. 곡 삭제 시 서비스가 먼저 NULL 로 만든 뒤 판본 삭제 |
+| recommended_edition_reviewed | BOOLEAN | N | **2026-09-08 추가.** 기본 false. **지금 추천 판본이 사람 눈을 통과했는가**(기획 §F6-4 "확인함", 공개 기준 §8-17). `recommended_edition_id` 가 **바뀌거나 NULL 이 되면 false 로 초기화**한다 — 확인한 것은 "그 판본"이 아니라 "지금 추천"이다. "누가·언제"는 남기지 않는다: 답이 추천 변경으로 곧바로 무효가 되므로 이력이 아니라 상태다. 계약은 02 §5-6-1 |
 | download_count | BIGINT | N | 기본 0. 곡 누적 다운로드(판본 합계를 비정규화). 정렬용. 원본은 `download_log` |
 | created_at / updated_at | TIMESTAMP(6) | N | |
 
@@ -338,6 +339,10 @@ else                                                        → UNKNOWN
 
 - `RECOMMENDED_EDITION` 과 `COPYRIGHT_JUDGMENT` 는 **동시에 나올 수 없다**(앞은 추천 없음, 뒤는 추천 있음).
 - **`RESTRICTED` 는 세지 않는다** — 사람이 내린 결론이라 할 일이 아니라 끝난 일이다(기획 §11-1).
+- **`recommended_edition_reviewed = false`(추천 판본 미검수)도 여기 넣지 않는다** (2026-09-08). 보완 필요가 답하는 질문은
+  "이 곡을 사용자에게 **열어 주려면** 뭐가 남았나" 인데, 미검수 곡은 **이미 열려 있다**(바로 받기 가능). 두 목록을 섞으면
+  공개 기준 §8-17 의 두 조건("35곡 이상 바로 받기 가능" + "미검수 0곡")이 한 숫자로 뭉개져 진척을 볼 수 없다.
+  미검수는 별도 지표·별도 필터다(02 §4-1 `needsRecommendationReviewWorks`, §4-6 `status=NEEDS_RECOMMENDATION_REVIEW`).
 - 이 규칙을 쓰는 곳은 **셋뿐이고 전부 같은 함수를 쓴다**: 관리 곡 목록 필터 `status=NEEDS_WORK`(02 §4-6) ·
   관리 홈 `needsWorkWorks`(02 §4-1) · 곡 상세 `missing[]`(02 §4-7). 한 곳에서 사라진 곡이 다른 곳에 남으면 결함이다.
 
@@ -469,6 +474,12 @@ else                                                        → UNKNOWN
 새 DB(테스트 `create-drop`, 초기화 후 로컬, 첫 배포 MySQL)는 엔티티대로 생성되므로 실행할 필요가 없다.
 **추가형 변경(nullable 컬럼·새 테이블·인덱스)은 이 표에 적지 않는다** — `update` 가 알아서 한다.
 이번 함께 들어가는 `work.collection_guide`(§3-3)가 그 예다.
+
+`work.recommended_edition_reviewed`(§3-3, 2026-09-08)도 **표에 넣지 않는다**(senior-dev 판단). `NOT NULL` 컬럼이라
+"기존 행은 어쩌나" 가 걸릴 수 있지만, Hibernate `update` 가 `DEFAULT FALSE` 를 붙여 만들고 **실데이터 복사본으로 기동을
+확인했다**(backend-dev: 곡 50건 전부 `false`, 추천이 있는 42곡이 미검수로 잡힘). 이 표는 **손으로 실행해야 하는 것**만
+담는 목록이라, 실행할 것이 없는 변경을 적으면 표를 볼 때마다 매번 "이건 했나?" 를 다시 판단하게 된다 —
+표의 모든 줄이 할 일이어야 표가 쓸모 있다. (기록만 남기면 되는 문장은 이 문단이 대신한다.)
 
 ### 9-1. enum 컬럼 → VARCHAR 고정 (2026-09-08)
 
