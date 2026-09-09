@@ -23,7 +23,10 @@ public final class DownloadFileName {
      * @param composerNameOriginal 작곡가 원어 표기
      * @param titleKo              한국어 대표 제목 (null/blank 면 원어 제목으로 폴백)
      * @param titleOriginal        원어 제목
-     * @param primaryCatalogNumber 대표 작품번호(sort_order 0). null/blank 면 괄호째 생략
+     * @param primaryCatalogNumber 대표 작품번호(sort_order 0). null/blank 면 괄호째 생략(§12-1 ①).
+     *                             <b>작품번호 행이 2개 이상이라 생략해야 하는 경우(③-a)는 호출자가 판정해
+     *                             여기에 {@code null} 을 넘긴다</b> — 값 하나로는 개수를 알 수 없기 때문이다.
+     *                             ②(제목이 이미 담고 있음)·③-b(값 안에 여는 괄호)는 이 클래스가 판정한다.
      * @return 확장자 .pdf 포함. 금지 문자 {@code \ / : * ? " < > |} → '-', 연속 공백 → 하나, 앞뒤 공백 제거
      */
     public static String build(String composerNameKo, String composerNameOriginal,
@@ -51,7 +54,7 @@ public final class DownloadFileName {
         String title = clean(pick(titleKo, titleOriginal));
         String catalog = clean(primaryCatalogNumber);
 
-        String suffix = (catalog.isEmpty() ? "" : " (" + catalog + ")")
+        String suffix = (omitCatalog(title, catalog) ? "" : " (" + catalog + ")")
                 + (scopeSuffix == null ? "" : scopeSuffix);
         String prefix = composer + " - ";
         return limit(prefix, title, suffix) + EXTENSION;
@@ -83,6 +86,50 @@ public final class DownloadFileName {
         return utf8Length(shortened) <= MAX_BASE_BYTES
                 ? shortened
                 : truncateToBytes(shortened, MAX_BASE_BYTES);
+    }
+
+    /**
+     * 괄호를 통째로 생략할지 (02 §3-4, 기획 01 §12-1 — "괄호는 제목이 말하지 않은 것만 말한다").
+     *
+     * <ul>
+     *   <li>① 작품번호가 없다 — 빈 괄호 {@code ()} 를 남기지 않는다.</li>
+     *   <li>② <b>파일명에 실제로 쓰인 제목</b>(폴백을 적용한 뒤의 제목)이 그 작품번호를 이미 담고 있다.</li>
+     *   <li>③-b 대표 작품번호 값 안에 여는 괄호 {@code (} 가 있다 — 괄호 안에 괄호를 넣지 않는다.
+     *       ③-a("행이 2개 이상")는 값 하나로 알 수 없어 호출자가 판정해 {@code null} 을 넘긴다.</li>
+     * </ul>
+     */
+    private static boolean omitCatalog(String title, String catalog) {
+        if (catalog.isEmpty() || catalog.indexOf('(') >= 0) {
+            return true;
+        }
+        return titleContains(title, catalog);
+    }
+
+    /**
+     * 제목이 작품번호를 이미 담고 있는지 — {@link SearchNormalizer} 로 정규화한 뒤 부분 문자열 포함으로 본다
+     * ({@code Op.9} · {@code Op. 9} · {@code op9} 를 같게 본다). <b>정규화는 비교에만 쓰고 출력은 원문이다</b>
+     * ({@code La prière …} 가 {@code La priere} 로 바뀌면 파일명이 망가진다).
+     *
+     * <p><b>뒤 경계 검사</b>: 찾은 위치 바로 뒤 문자가 숫자면 포함으로 보지 않는다 —
+     * 제목 {@code 연습곡 Op.10}({@code 연습곡op10})은 작품번호 {@code Op.1}({@code op1})을 담고 있는 것이 아니다.
+     * 다른 번호에 걸치면 사용자는 파일 이름만 보고 곡을 잘못 고른다.
+     *
+     * <p><b>앞쪽에는 경계 검사를 두지 않는다</b> — 정규화가 구분자를 지우므로 매치 앞이 숫자인 것은 정상이다
+     * (시드 #43 {@code 즉흥곡 Op.90 (D.899)} + 대표 {@code D.899}). 번호를 늘리는 것은 뒤에 붙는 숫자뿐이라 뒤만 막는다.
+     */
+    private static boolean titleContains(String title, String catalog) {
+        String haystack = SearchNormalizer.normalize(title);
+        String needle = SearchNormalizer.normalize(catalog);
+        if (needle.isEmpty()) {
+            return true;
+        }
+        for (int at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + 1)) {
+            int after = at + needle.length();
+            if (after >= haystack.length() || !Character.isDigit(haystack.charAt(after))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** UTF-8 {@code maxBytes} 이하가 되도록 뒤에서 자른다 — 코드포인트(서로게이트 쌍 포함)를 쪼개지 않는다. */

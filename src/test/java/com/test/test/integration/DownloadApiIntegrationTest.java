@@ -33,10 +33,11 @@ class DownloadApiIntegrationTest extends SheetMusicFixtureSupport {
         Tokens admin = loginAdmin();
         long composerId = createComposer(admin, "테스트작곡가", "Testcomposer, Zz");
         ReadyWork rw = createWorkWithRecommendedEdition(admin, composerId, "테스트 소나타", "Test Sonata in A",
-                List.of("K.331/300i", "Op.99"), List.of(), "INTERMEDIATE", 1, "FREE");
+                List.of("K.331/300i"), List.of(), "INTERMEDIATE", 1, "FREE");
         byte[] expected = samplePdfBytes();
 
-        // 대표 작품번호 = sort_order 0 = 목록의 첫 번째, 슬래시는 '-' 로
+        // 작품번호 1개(= 괄호가 붙는 경우), 슬래시는 '-' 로.
+        // 작품번호가 2개 이상이면 괄호째 생략된다 — 02 §3-4 ③, DownloadCatalogOmissionIntegrationTest
         String expectedName = "테스트작곡가 - 테스트 소나타 (K.331-300i).pdf";
         MvcResult result = mockMvc.perform(get("/api/editions/{id}/download", rw.editionId()))
                 .andExpect(status().isOk())

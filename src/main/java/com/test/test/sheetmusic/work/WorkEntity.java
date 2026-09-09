@@ -345,7 +345,21 @@ public class WorkEntity {
         this.downloadCount++;
     }
 
-    /** 대표 작품번호(sort_order 0) — 다운로드 파일명·정렬에 쓴다. */
+    /**
+     * 다운로드 파일명 괄호에 쓸 작품번호 (02 §3-4 ③-a, 기획 01 §12-1).
+     *
+     * <p>작품번호 행이 <b>2개 이상이면 {@code null}</b> 이다 — 여럿 중 하나만 골라 적으면
+     * "그 번호만 든 악보"로 읽혀 사용자가 곡을 잘못 고른다. 개수는 값 하나로 알 수 없으므로
+     * 호출자인 이 엔티티가 판정하고 {@code DownloadFileName} 의 시그니처는 그대로 둔다.
+     *
+     * <p>{@link #primaryCatalogNumber()} 와 나누어 둔 이유: 그쪽은 정렬({@code sort_key})이 계속 쓰므로
+     * 의미를 바꾸면 목록 정렬이 함께 흔들린다.
+     */
+    public String fileNameCatalogNumber() {
+        return this.catalogNumbers.size() > 1 ? null : primaryCatalogNumber();
+    }
+
+    /** 대표 작품번호(sort_order 0) — 정렬(sort_key)에 쓴다. 파일명은 {@link #fileNameCatalogNumber()}. */
     public String primaryCatalogNumber() {
         return this.catalogNumbers.stream()
                 .min((a, b) -> Integer.compare(a.getSortOrder(), b.getSortOrder()))

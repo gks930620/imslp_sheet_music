@@ -66,7 +66,7 @@ class DownloadMetaReader {
                 .storedFileName(file.getStoredFileName())
                 .fileName(DownloadFileName.build(
                         work.getComposer().getNameKo(), work.getComposer().getNameOriginal(),
-                        work.getTitleKo(), work.getTitleOriginal(), work.primaryCatalogNumber(),
+                        work.getTitleKo(), work.getTitleOriginal(), work.fileNameCatalogNumber(),
                         edition.downloadNameSuffix()))
                 .build();
     }
