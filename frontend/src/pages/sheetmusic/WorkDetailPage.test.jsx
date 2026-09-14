@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { WorkDetailPage } from "./WorkDetailPage.jsx";
 import { renderWithProviders } from "../../test/renderWithProviders.jsx";
-import { mockFetch, findCalls } from "../../test/apiMock.js";
+import { mockFetch, findCalls, fakeResponse } from "../../test/apiMock.js";
 import {
   workDetail,
   edition,
@@ -38,7 +38,7 @@ describe("WorkDetailPage — 곡 정보 영역", () => {
     await findText("월광 소나타");
     expect(screen.getByRole("heading", { level: 1, name: "월광 소나타" })).toBeInTheDocument();
     expect(screen.getByText("Piano Sonata No.14, Op.27 No.2")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /베토벤 \(Beethoven, Ludwig van\)/ })).toHaveAttribute("href", "/composers/4");
+    expect(screen.getByRole("link", { name: /베토벤 \(Beethoven, Ludwig van\)/ })).toHaveAttribute("href", "/piano/composers/4");
     expectText("Op.27 No.2");
     expect(screen.getByText("중급")).toBeInTheDocument();
     expectText("이렇게도 불러요: 월광, 월광 소나타, Moonlight Sonata");
@@ -265,7 +265,7 @@ describe("WorkDetailPage — 같은 작곡가의 다른 곡·통신 상태", () 
     renderDetail(workDetail({ sameComposerWorks: [workElise] }));
     await findText("같은 작곡가의 다른 곡");
     const section = screen.getByRole("heading", { name: "같은 작곡가의 다른 곡" }).parentElement;
-    expect(within(section).getByRole("link", { name: /엘리제를 위하여/ })).toHaveAttribute("href", "/works/22");
+    expect(within(section).getByRole("link", { name: /엘리제를 위하여/ })).toHaveAttribute("href", "/piano/works/22");
   });
 
   it("같은 작곡가 곡 0개면 영역 생략", async () => {
@@ -278,7 +278,7 @@ describe("WorkDetailPage — 같은 작곡가의 다른 곡·통신 상태", () 
     const { getLocation } = renderDetail(null, { status: 404 });
     await findText("찾을 수 없는 페이지예요");
     expectText("주소가 틀렸거나 내려간 곡이에요");
-    expect(screen.getByRole("link", { name: "홈으로" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "홈으로" })).toHaveAttribute("href", "/piano");
     expect(getLocation().pathname).toBe("/works/21");
   });
 
@@ -357,11 +357,24 @@ describe("WorkDetailPage — 다운로드 실패 안내", () => {
 
   it("확인하는 동안 버튼 문구는 '받는 중…', 끝나면 원래 문구로 돌아온다", async () => {
     const user = userEvent.setup();
-    renderWithDownloadCheck({ url: "/api/editions/301/download", raw: "", delay: 50 });
+    // 고정 delay 는 findText 첫 폴링 전에 풀려 '받는 중…' 을 놓칠 수 있다(flake).
+    // 확인 응답을 테스트가 직접 여는 gate 로 잡아 전이 상태를 확정적으로 관찰한다.
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    renderWithDownloadCheck({
+      url: "/api/editions/301/download",
+      handler: async () => {
+        await gate;
+        return fakeResponse("", 200);
+      },
+    });
     await findText("추천 판본");
     await clickDownload(user);
 
-    await findText("받는 중…");
+    await findText("받는 중…"); // gate 가 열리기 전이라 이 상태가 반드시 존재한다
+    release();
     await findText("PDF 받기 · 2.4MB");
   });
 });

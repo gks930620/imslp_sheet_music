@@ -9,7 +9,7 @@ import { expectNoText, expectText } from "../../test/text.js";
 describe("WorkCard (full)", () => {
   it("카드 전체가 곡 상세 링크다", () => {
     renderWithProviders(<WorkCard work={workMoonlight} />);
-    expect(screen.getByRole("link")).toHaveAttribute("href", "/works/21");
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/piano/works/21");
   });
 
   it("한국어 제목·원어 제목·작곡가(원어)·작품번호·쪽수를 보여준다", () => {
@@ -202,7 +202,7 @@ describe("WorkCard (compact — 홈 인기곡·같은 작곡가의 다른 곡)",
     expectText("베토벤");
     expect(screen.getByText("중급")).toBeInTheDocument();
     expect(screen.queryByText("Piano Sonata No.14, Op.27 No.2")).not.toBeInTheDocument();
-    expect(screen.getByRole("link")).toHaveAttribute("href", "/works/21");
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/piano/works/21");
   });
 
   it("상태 뱃지는 compact 에서도 보인다", () => {

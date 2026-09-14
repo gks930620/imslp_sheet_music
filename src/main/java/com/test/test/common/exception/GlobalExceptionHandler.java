@@ -1,6 +1,7 @@
 package com.test.test.common.exception;
 
 import com.test.test.common.dto.ErrorResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -18,7 +19,9 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.util.DisconnectedClientHelper;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -243,6 +246,32 @@ public class GlobalExceptionHandler {
                 "INTERNAL_SERVER_ERROR"
         );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+    }
+
+    /**
+     * I/O 실패 — <b>클라이언트가 먼저 끊은 것은 서버 오류가 아니다</b> (03 §20, qa 6차 결함).
+     *
+     * <p>미리보기 PNG·PDF 다운로드 중 사용자가 화면을 떠나면 응답을 쓰던 중 단절 예외가 올라온다.
+     * 이건 정상 동작이라 ERROR 로 남기지 않고 <b>DEBUG 한 줄(스택 없이)</b>만 남긴다. 응답도 만들지 않는다 —
+     * 커넥션이 이미 죽어 아무도 받지 못하는 본문을 만들면 2차 예외(컨버터 선택 실패)만 다시 난다.
+     * {@code null} 을 반환하면 {@code HttpEntityMethodProcessor} 가 "처리됨, 본문 없음" 으로 끝낸다
+     * (상태코드도 손대지 않는다 — 499 같은 코드를 지어내지 않는다).
+     *
+     * <p>단절 판별은 스프링이 자기 리졸버에서 쓰는 것과 <b>같은</b> 기준({@link DisconnectedClientHelper})을 쓴다.
+     * 우리 문자열 목록을 따로 만들면 같은 상황이 위치에 따라 다르게 로깅된다 (03 §20-1).
+     *
+     * <p><b>단절이 아닌 I/O 실패</b>(디스크 읽기 실패·파일 없음)는 삼키지 않는다 —
+     * 아래 최후의 보루를 그대로 호출해 ERROR + 스택 + 500 을 유지한다 (03 §20-2).
+     */
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<ErrorResponse> handleIOException(IOException e, HttpServletRequest request) {
+        if (DisconnectedClientHelper.isClientDisconnectedException(e)) {
+            log.debug("Client disconnected: {} {} - {}: {}",
+                    request.getMethod(), request.getRequestURI(),
+                    e.getClass().getSimpleName(), e.getMessage());
+            return null;
+        }
+        return handleException(e);
     }
 
     /**

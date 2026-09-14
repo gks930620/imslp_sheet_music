@@ -81,4 +81,24 @@ public final class AutoJudgeDTOs {
          */
         private int recommendationKept;
     }
+
+    /**
+     * §5-8-1 대기함이 함께 싣는 <b>되돌리기 잔량</b>. 되돌릴 것이 없어도 {@code 0/0} 으로 항상 온다 —
+     * 화면이 키 유무로 분기하지 않게 한다(§5-11 {@code byRule}/{@code skipped} 와 같은 원칙).
+     *
+     * <p>§5-12 와 <b>같은 조건</b>으로 센다. 불변식: 그 사이 아무도 판정을 바꾸지 않았다면 지금 §5-12 를 부른 결과가
+     * {@code reverted == revertibleEditions}, {@code recommendationKept == revertibleRecommendedWorks} 다.
+     */
+    @Getter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class RevertibleSummary {
+
+        /** {@code copyright_judged_by = 'system:auto' AND korea_copyright = FREE} 인 판본 수. */
+        private long revertibleEditions;
+
+        /** 그중 어떤 곡의 추천 판본인 것 = 지금 되돌리면 다운로드가 닫히는 곡 수(숨김 곡도 빼지 않는다). */
+        private long revertibleRecommendedWorks;
+    }
 }

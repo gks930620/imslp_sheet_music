@@ -18,13 +18,13 @@ describe("Layout 헤더", () => {
 
   it("로고 '쉬운악보' 는 홈으로 간다", () => {
     renderWithProviders(<Layout />);
-    expect(header().getByRole("link", { name: /쉬운악보/ })).toHaveAttribute("href", "/");
+    expect(header().getByRole("link", { name: /쉬운악보/ })).toHaveAttribute("href", "/piano");
     expect(header().queryByText("Boilerplate")).not.toBeInTheDocument();
   });
 
   it("'작곡가' 메뉴가 있고, 커뮤니티·채팅 메뉴는 없다", () => {
     renderWithProviders(<Layout />);
-    expect(header().getByRole("link", { name: /작곡가/ })).toHaveAttribute("href", "/composers");
+    expect(header().getByRole("link", { name: /작곡가/ })).toHaveAttribute("href", "/piano/composers");
     expect(header().queryByText("커뮤니티")).not.toBeInTheDocument();
     expect(header().queryByText("채팅")).not.toBeInTheDocument();
   });

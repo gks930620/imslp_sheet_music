@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { WorkCard } from "../../components/sheetmusic/WorkCard.jsx";
 import { LevelChip } from "../../components/sheetmusic/LevelChip.jsx";
 import { CopyrightBadge } from "../../components/sheetmusic/CopyrightBadge.jsx";
@@ -9,8 +9,11 @@ import { ErrorState } from "../../components/common/ErrorState.jsx";
 import { NotFoundView } from "../../components/common/NotFoundView.jsx";
 import { PreviewLightbox } from "../../components/common/PreviewLightbox.jsx";
 import { useApiResource } from "../../hooks/useApiResource.js";
+import { useSection, useSectionPath } from "../../hooks/useSection.js";
+import { useDocumentTitle } from "../../hooks/useDocumentTitle.js";
 import { authFetch, callPublicApi } from "../../lib/http.js";
 import { formatEditionKind, formatEditionScope, formatFileSizeCompact } from "../../lib/format.js";
+import { findSectionByCode, linkSection } from "../../lib/sections.js";
 
 /**
  * 기획 §F3-6 · §5 예외표 — previewUrl 이 없는 이유가 "파일이 없다" 가 아니라 "판정이 안 끝났다" 일 때의 문구.
@@ -32,6 +35,10 @@ function editionInfoLine(edition) {
 /** 03_곡상세.md — 주인공은 추천 판본 카드 하나와 다운로드 버튼 하나 */
 export function WorkDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const section = useSection();
+  const sectionPath = useSectionPath();
+  // 02 §0-7 — 곡 상세는 section 을 보내지 않는다. 곡이 스스로 구분을 안다
   const detail = useApiResource(() => callPublicApi(`/api/works/${id}`).then((result) => result.data), { deps: [id] });
   const [expandedOverride, setExpandedOverride] = useState(null);
   const [lightbox, setLightbox] = useState(null);
@@ -39,6 +46,18 @@ export function WorkDetailPage() {
   const othersRef = useRef(null);
 
   const work = detail.data;
+
+  // 기획 04 §1-4 · 02 §7 — 응답 section 이 주소의 구분과 다르면 그 구분 주소로 replace(자기 교정).
+  // 옛 주소 /works/:id 는 라우터가 먼저 /piano/… 로 보내므로 여기서는 늘 구분 안에 있다. 구분 밖에서 열렸거나
+  // 응답에 section 이 없으면(아직 안 붙은 서버) 아무것도 하지 않는다 — 화면이 깨지지 않는 쪽이 계약이다.
+  const responseSection = findSectionByCode(work?.section);
+  useEffect(() => {
+    if (!section || !responseSection || responseSection.slug === section.slug) return;
+    navigate(`/${responseSection.slug}/works/${id}`, { replace: true });
+  }, [section, responseSection, id, navigate]);
+
+  // 00 §4-1 — 자기 교정 뒤에는 주소의 구분 이름으로 제목을 쓴다(08 §5)
+  useDocumentTitle(work ? `${work.titleKo || work.titleOriginal} — 쉬운악보 ${linkSection(section).label}` : null);
   const recommended = work?.recommendedEdition ?? null;
   const preparing = Boolean(work) && (!recommended || !recommended.hasFile);
   const restricted = Boolean(recommended) && !preparing && recommended.koreaCopyright === "RESTRICTED";
@@ -52,7 +71,12 @@ export function WorkDetailPage() {
   const expanded = expandedOverride ?? hasFreeOther;
 
   if (detail.error) {
-    return detail.error.status === 404 ? <NotFoundView /> : <ErrorState onRetry={detail.reload} />;
+    // 없는 곡·숨김 곡의 404 — 보조 문구는 곡에 대한 것(00 §2-4 기존). 라우트 404(없는 구분 이름)는 NotFoundPage 가 구분까지 말한다
+    return detail.error.status === 404 ? (
+      <NotFoundView description="주소가 틀렸거나 내려간 곡이에요" />
+    ) : (
+      <ErrorState onRetry={detail.reload} />
+    );
   }
 
   if (!work) {
@@ -118,7 +142,7 @@ export function WorkDetailPage() {
         {work.titleKo && work.titleOriginal ? <p className="work-detail-original">{work.titleOriginal}</p> : null}
         <p className="work-detail-composer-row">
           {work.composer ? (
-            <Link className="work-detail-composer" to={`/composers/${work.composer.id}`}>
+            <Link className="work-detail-composer" to={sectionPath(`/composers/${work.composer.id}`)}>
               {composerName}
               <span className="material-icons" aria-hidden="true">
                 chevron_right

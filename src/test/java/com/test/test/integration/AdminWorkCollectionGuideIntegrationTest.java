@@ -3,7 +3,6 @@ package com.test.test.integration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.test.test.integration.support.AdminApiTestSupport;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -70,7 +69,7 @@ class AdminWorkCollectionGuideIntegrationTest extends AdminApiTestSupport {
         assertThat(seeded).as("시드 묶음 곡의 수록곡 안내").isNotBlank();
 
         // 관리자가 상세 화면에서 제목만 고치고 저장한다 — 폼은 상세 응답에 있는 필드만 들고 있다
-        Map<String, Object> form = saveBodyFrom(before);
+        Map<String, Object> form = workSaveBodyFrom(before);
         form.put("titleKo", "월광 소나타(수정) " + uniq());
         JsonNode saved = data(adminPut(admin, "/api/admin/works/{id}", form, workId).andExpect(status().isOk()));
 
@@ -95,25 +94,6 @@ class AdminWorkCollectionGuideIntegrationTest extends AdminApiTestSupport {
     }
 
     // ===== 헬퍼 =====
-
-    /** §4-7 응답 → §4-8 요청 본문. 관리 화면이 하는 일과 같다(응답에 없는 값은 폼도 못 보낸다). */
-    private Map<String, Object> saveBodyFrom(JsonNode detail) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("composerId", detail.path("composer").path("id").asLong());
-        body.put("titleKo", text(detail, "titleKo"));
-        body.put("titleOriginal", text(detail, "titleOriginal"));
-        body.put("catalogNumbers", strings(detail.path("catalogNumbers")));
-        body.put("aliases", strings(detail.path("aliases")));
-        body.put("level", text(detail, "level"));
-        body.put("compositionYear", text(detail, "compositionYear"));
-        body.put("musicalKey", text(detail, "musicalKey"));
-        body.put("movements", text(detail, "movements"));
-        body.put("movementPageGuide", text(detail, "movementPageGuide"));
-        body.put("collectionGuide", text(detail, "collectionGuide"));
-        body.put("imslpUrl", text(detail, "imslpUrl"));
-        body.put("hidden", detail.path("hidden").asBoolean());
-        return body;
-    }
 
     /** 시드 묶음 곡(수록곡 안내가 있는 38곡 중 하나) — 검색으로 찾는다. */
     private long findSeedCollectionWorkId() throws Exception {

@@ -501,6 +501,43 @@ describe("WorkFormPage — 수록곡 안내(collectionGuide) 왕복", () => {
     expect(findCall(COLLECTION).body.collectionGuide).toBeNull();
   });
 
+  /*
+   * 도움말 (기획 §3 F5-2 · §12-2, 인수 조건 §6 — qa 5차 결함 2. senior-dev 가 문구 확정, 2026-09-09).
+   *
+   * 이 칸은 **관리자가 무엇을 적어야 하는지 스스로 알 수 없는 칸**이다: 라벨 "수록곡 안내" 만으로는
+   * 쪽수를 적는지 곡 번호를 적는지, 왜 적어야 하는지 알 수 없다. 그리고 이 값 하나가 사용자 화면에서
+   * 하는 일이 크다 — 있으면 그 곡이 "묶음 악보" 가 되어 난이도·쪽수에 "(전곡 기준)" 이 붙고(§2-2-1 COLLECTION),
+   * 검색 결과의 "'…'가 들어 있는 악보" 줄이 생긴다. 바로 위 "악장 페이지 안내" 에는 도움말이 있어 대비도 뚜렷했다.
+   *
+   * 문구는 기획 §3 F5-2 가 이미 따옴표로 적어 둔 문장을 제품 말투(…어요)로 맞춘 것이다.
+   * 인수 조건 §6 이 "취지의 도움말" 로 열어 뒀으므로 문장 끝만 맞췄다(designer 가 다르게 정하면 이 상수를 고친다).
+   */
+  const COLLECTION_GUIDE_HELP =
+    '여러 곡·여러 악장이 한 PDF 에 들어 있는 곡이면 적어 주세요 — 이 줄이 있어야 사용자 화면에 "(전곡 기준)"이 붙어요';
+
+  it("입력칸에 도움말이 있다 — 무엇을 적는 칸인지와 이 값이 사용자 화면에서 하는 일", async () => {
+    renderEdit();
+    await waitLoaded();
+
+    expectText(COLLECTION_GUIDE_HELP);
+  });
+
+  it("그 도움말은 '수록곡 안내' 칸 옆에 있다 — 다른 칸의 설명으로 읽히면 안 된다", async () => {
+    renderEdit();
+    await waitLoaded();
+
+    const group = screen.getByLabelText("수록곡 안내").closest(".form-group");
+    expect(group).not.toBeNull();
+    expect(group.textContent.replace(/s+/g, " ")).toContain(COLLECTION_GUIDE_HELP);
+  });
+
+  it("새 곡 등록 화면에도 같은 도움말이 있다 — 수집으로 들어온 곡을 채우는 자리도 여기다", async () => {
+    renderNew();
+    await findText("새 곡");
+
+    expectText(COLLECTION_GUIDE_HELP);
+  });
+
   it("수록곡 안내만 고쳐도 '바뀐 게 있다'로 보고 이탈을 막는다 (05-E)", async () => {
     const user = userEvent.setup();
     const { getLocation } = renderEdit();

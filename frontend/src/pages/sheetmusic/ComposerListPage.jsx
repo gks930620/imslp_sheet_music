@@ -3,13 +3,24 @@ import { Link } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState.jsx";
 import { ErrorState } from "../../components/common/ErrorState.jsx";
 import { useApiResource } from "../../hooks/useApiResource.js";
+import { useSection, useSectionPath } from "../../hooks/useSection.js";
+import { useDocumentTitle } from "../../hooks/useDocumentTitle.js";
 import { callPublicApi } from "../../lib/http.js";
 import { formatLifeSpan } from "../../lib/format.js";
 import { getChosung } from "../../lib/hangul.js";
+import { linkSection } from "../../lib/sections.js";
 
 /** 04_작곡가.md 화면 A — 서버 정렬 그대로, 초성 구분 헤더는 화면에서 계산. 페이지 이동 없음 */
 export function ComposerListPage() {
-  const list = useApiResource(() => callPublicApi("/api/composers").then((result) => result.data), { deps: [] });
+  const section = linkSection(useSection());
+  const sectionPath = useSectionPath();
+  useDocumentTitle(`작곡가 — 쉬운악보 ${section.label}`);
+
+  // 02 §0-7 — "공개 곡 1개 이상" 이 그 구분 기준으로 좁아지고, workCount 도 그 구분 기준이다
+  const list = useApiResource(
+    () => callPublicApi(`/api/composers?section=${section.code}`).then((result) => result.data),
+    { deps: [section.code] },
+  );
 
   const composers = list.data?.composers ?? [];
   // 서버 정렬을 그대로 두고, 앞 항목과 초성이 다를 때만 구분 헤더를 넣는다
@@ -49,7 +60,7 @@ export function ComposerListPage() {
               return (
                 <Fragment key={composer.id}>
                   {showHeader ? <p className="composer-list-header">{header}</p> : null}
-                  <Link className="composer-list-row" to={`/composers/${composer.id}`}>
+                  <Link className="composer-list-row" to={sectionPath(`/composers/${composer.id}`)}>
                     <span className="composer-list-name">{composer.nameKo || composer.nameOriginal}</span>
                     <span className="composer-list-count">
                       {`${composer.workCount}곡`}

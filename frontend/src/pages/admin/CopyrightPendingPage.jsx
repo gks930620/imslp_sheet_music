@@ -142,8 +142,8 @@ export function CopyrightPendingPage() {
         </span>
       </div>
 
-      {/* 02 §7 — 대기함 상단의 자동 판정. 이 단계를 건너뛰면 바로 받기 가능한 곡이 0개다(기획 §F7-6 A) */}
-      <AutoJudgePanel onDone={list.reload} />
+      {/* 대기함 상단 자동 판정 — 02 §7 · §5-8-1 (이유는 AutoJudgePanel 한 곳에) */}
+      <AutoJudgePanel autoJudged={data?.autoJudged} onDone={list.reload} />
 
       <div className="admin-list-filters">
         <span className="search-bar search-bar-compact admin-list-search">

@@ -6,24 +6,32 @@ import { EmptyState } from "../../components/common/EmptyState.jsx";
 import { ErrorState } from "../../components/common/ErrorState.jsx";
 import { NotFoundView } from "../../components/common/NotFoundView.jsx";
 import { useApiResource } from "../../hooks/useApiResource.js";
+import { useSection } from "../../hooks/useSection.js";
+import { useDocumentTitle } from "../../hooks/useDocumentTitle.js";
 import { callPublicApi } from "../../lib/http.js";
 import { formatLifeSpan } from "../../lib/format.js";
+import { linkSection } from "../../lib/sections.js";
 import { applyWorkFilters, buildWorkQuery, readWorkFilters, withPage } from "../../lib/workQuery.js";
 
-/** 04_작곡가.md 화면 B — /composers/:id?sort=&level=&pages=&downloadable=&page= */
+/** 04_작곡가.md 화면 B — /{구분}/composers/:id?sort=&level=&pages=&downloadable=&page= */
 export function ComposerDetailPage() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const section = linkSection(useSection());
   const filters = readWorkFilters(searchParams);
-  const query = buildWorkQuery(searchParams, ["sort", "level", "pages", "downloadable", "page"]);
+  // 02 §0-7 · §7 — 작곡가 정보(workCount)·곡 목록 모두 그 구분 안에서. 404 조건은 구분과 무관하다
+  const query = `section=${section.code}&${buildWorkQuery(searchParams, ["sort", "level", "pages", "downloadable", "page"])}`;
 
-  const info = useApiResource(() => callPublicApi(`/api/composers/${id}`).then((result) => result.data), {
-    deps: [id],
-  });
+  const info = useApiResource(
+    () => callPublicApi(`/api/composers/${id}?section=${section.code}`).then((result) => result.data),
+    { deps: [id, section.code] },
+  );
   const worksResource = useApiResource(
     () => callPublicApi(`/api/composers/${id}/works?${query}`).then((result) => result.data),
     { deps: [id, query] },
   );
+  const composerName = info.data ? info.data.nameKo || info.data.nameOriginal : null;
+  useDocumentTitle(composerName ? `${composerName} — 쉬운악보 ${section.label}` : null);
 
   if (info.error) {
     return info.error.status === 404 ? <NotFoundView /> : <ErrorState onRetry={info.reload} />;

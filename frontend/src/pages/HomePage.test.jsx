@@ -42,7 +42,7 @@ describe("HomePage — 기본", () => {
     expect(screen.getByText("월광")).toBeInTheDocument();
     expect(screen.getByText("K.545")).toBeInTheDocument();
     await user.click(screen.getByText("쇼팽 녹턴"));
-    expect(getLocation().pathname).toBe("/search");
+    expect(getLocation().pathname).toBe("/piano/search");
     expect(getLocation().params.get("q")).toBe("쇼팽 녹턴");
   });
 
@@ -51,7 +51,7 @@ describe("HomePage — 기본", () => {
     mockHome();
     const { getLocation } = renderWithProviders(<HomePage />);
     await user.type(screen.getByPlaceholderText(PLACEHOLDER), "엘리제{Enter}");
-    expect(getLocation().pathname).toBe("/search");
+    expect(getLocation().pathname).toBe("/piano/search");
     expect(getLocation().params.get("q")).toBe("엘리제");
   });
 
@@ -72,9 +72,9 @@ describe("HomePage — 인기곡", () => {
     expect(findCall("/api/works/popular").params.get("limit")).toBe("10");
     // 기획 §11-3: 이 자리는 순위표가 아니라 견본 진열대다 — 제목이 그 약속을 말한다
     expect(screen.getByRole("heading", { name: "지금 바로 받을 수 있는 인기곡" })).toBeInTheDocument();
-    const links = screen.getAllByRole("link").filter((a) => /^\/works\/\d+$/.test(a.getAttribute("href")));
+    const links = screen.getAllByRole("link").filter((a) => /^\/piano\/works\/\d+$/.test(a.getAttribute("href")));
     expect(links).toHaveLength(10);
-    expect(links[0]).toHaveAttribute("href", "/works/100");
+    expect(links[0]).toHaveAttribute("href", "/piano/works/100");
     expect(links[0]).toHaveTextContent("1");
     expect(links[0]).toHaveTextContent("인기곡 1");
   });
@@ -130,7 +130,7 @@ describe("HomePage — 작곡가 바로가기", () => {
     renderWithProviders(<HomePage />);
     await findText("쇼팽");
     expect(findCall("/api/composers/featured").params.get("limit")).toBe("8");
-    const links = screen.getAllByRole("link").filter((a) => /^\/composers\/\d+$/.test(a.getAttribute("href")));
+    const links = screen.getAllByRole("link").filter((a) => /^\/piano\/composers\/\d+$/.test(a.getAttribute("href")));
     expect(links).toHaveLength(8);
     expect(links[0]).toHaveTextContent("쇼팽");
     expect(links[0]).toHaveTextContent("24곡");
@@ -139,7 +139,7 @@ describe("HomePage — 작곡가 바로가기", () => {
   it("'모든 작곡가 보기' → /composers", async () => {
     mockHome();
     renderWithProviders(<HomePage />);
-    expect(screen.getByRole("link", { name: /모든 작곡가 보기/ })).toHaveAttribute("href", "/composers");
+    expect(screen.getByRole("link", { name: /모든 작곡가 보기/ })).toHaveAttribute("href", "/piano/composers");
     await findText("쇼팽");
   });
 

@@ -24,7 +24,7 @@ describe("ComposerListPage", () => {
     renderList();
     await findText("그리그");
     const row = screen.getByRole("link", { name: /그리그/ });
-    expect(row).toHaveAttribute("href", "/composers/1");
+    expect(row).toHaveAttribute("href", "/piano/composers/1");
     expect(row).toHaveTextContent("12곡");
     expect(row).toHaveTextContent("Grieg, Edvard · 1843–1907");
   });

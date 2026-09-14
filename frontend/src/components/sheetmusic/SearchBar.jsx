@@ -1,18 +1,34 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSectionPath } from "../../hooks/useSection.js";
+import { useMediaQuery } from "../../hooks/useMediaQuery.js";
+import { DEFAULT_SCOPE, buildSearchHref, scopePlaceholder } from "../../lib/searchScope.js";
 
-const PLACEHOLDER = {
-  large: "곡 이름, 작곡가, 작품번호로 찾기 — 예: 월광, 쇼팽 녹턴, K.545",
-  compact: "곡 이름, 작곡가, 작품번호",
-};
+/** 헤더(compact)의 자리 문구는 기준과 무관하게 고정 — 헤더는 항상 "전체"다 (08 §4-3·§4-6 D7) */
+const COMPACT_PLACEHOLDER = "곡 이름, 작곡가, 작품번호";
+/** 00 §3-1 — 이 폭 아래에서는 긴 자리 문구가 잘리므로 짧은 버전(08 §4-3)을 쓴다. 검색창 높이 분기(600px)와 같은 선 */
+const NARROW_QUERY = "(max-width: 599px)";
 
 /**
  * 00_공통 §3-1 검색창.
  * large: 홈·검색 결과·찾을 수 없음 / compact: 헤더
  * 공백만 입력하면 이동하지 않고 입력칸만 흔들린다 (오류 문구 없음).
+ * 이동 주소는 현재 구분의 검색 결과(`/{구분}/search`, 02 §0-5) — 구분은 주소에서 읽는다(03 §21-6).
+ *
+ * @param scope large 에서 선택된 검색 기준(ALL|TITLE|COMPOSER). 제출 시 `in` 으로 실린다(전체면 생략). compact 는 항상 전체
+ * @param from  준비 중 구분의 헤더 검색이 붙이는 화면 전용 쿼리(`violin`|`orchestra`, 08 §2-4)
  */
-export function SearchBar({ variant = "large", initialValue = "", autoFocus = false, className = "" }) {
+export function SearchBar({
+  variant = "large",
+  initialValue = "",
+  autoFocus = false,
+  className = "",
+  scope = DEFAULT_SCOPE,
+  from,
+}) {
   const navigate = useNavigate();
+  const sectionPath = useSectionPath();
+  const narrow = useMediaQuery(NARROW_QUERY);
   const inputRef = useRef(null);
   const [value, setValue] = useState(initialValue);
   const [shaking, setShaking] = useState(false);
@@ -25,6 +41,9 @@ export function SearchBar({ variant = "large", initialValue = "", autoFocus = fa
     if (autoFocus) inputRef.current?.focus();
   }, [autoFocus]);
 
+  const isCompact = variant === "compact";
+  const placeholder = isCompact ? COMPACT_PLACEHOLDER : scopePlaceholder(scope, narrow);
+
   const submit = (event) => {
     event.preventDefault();
     const keyword = value.trim();
@@ -34,7 +53,7 @@ export function SearchBar({ variant = "large", initialValue = "", autoFocus = fa
       inputRef.current?.focus();
       return;
     }
-    navigate(`/search?q=${encodeURIComponent(keyword)}`);
+    navigate(buildSearchHref(sectionPath("/search"), { q: keyword, scope: isCompact ? DEFAULT_SCOPE : scope, from }));
   };
 
   return (
@@ -48,7 +67,7 @@ export function SearchBar({ variant = "large", initialValue = "", autoFocus = fa
           className="search-bar-input"
           type="text"
           value={value}
-          placeholder={PLACEHOLDER[variant] ?? PLACEHOLDER.large}
+          placeholder={placeholder}
           onChange={(event) => setValue(event.target.value)}
         />
         {value ? (

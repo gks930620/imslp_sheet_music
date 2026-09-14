@@ -1,5 +1,6 @@
 package com.test.test.sheetmusic.work.repository;
 
+import com.test.test.sheetmusic.work.Section;
 import com.test.test.sheetmusic.work.WorkEntity;
 import java.util.List;
 import org.springframework.data.domain.Page;
@@ -13,10 +14,11 @@ public interface WorkRepositoryCustom {
     long count(WorkSearchCondition condition);
 
     /**
-     * 홈 "지금 바로 받을 수 있는 인기곡" (02 §3-2, 2026-09-08 전면 개정).
+     * 홈 "지금 바로 받을 수 있는 인기곡" (02 §3-2, 2026-09-08 전면 개정 · 2026-09-10 구분 추가).
      * 자격 곡(READY + 한국어 제목)만 오르고, 모자란 칸만 준비 중 곡으로 채운다. 자격 곡이 0개면 빈 목록.
+     * 자격·폴백 모두 {@code section} 안에서만 고른다(02 §0-7).
      */
-    List<WorkEntity> findPopular(int limit);
+    List<WorkEntity> findPopular(Section section, int limit);
 
     /** 관리 홈 {@code needsWorkWorks} (02 §4-1) — 목록 필터·곡 상세와 같은 {@code WorkNeedsWork} 규칙. */
     long countNeedsWork();

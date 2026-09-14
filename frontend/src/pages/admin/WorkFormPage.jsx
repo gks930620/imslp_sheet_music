@@ -43,6 +43,13 @@ const MISSING_LABELS = {
 
 const TITLE_KO_HELP = "비워 두면 사용자에겐 원어 제목이 보이고 상태는 '보완 필요'가 돼요";
 const MOVEMENT_GUIDE_HELP = '사용자 곡 상세에 "악장 안내: … (추천 판본 기준)"으로 보여요';
+/**
+ * 라벨 "수록곡 안내" 만으로는 무엇을 적는 칸인지 알 수 없다. 게다가 이 값 하나가 사용자 화면을 바꾼다
+ * (02 §2-2-1 COLLECTION — 난이도·쪽수에 "(전곡 기준)"이 붙는다). 그 사실이 관리자가 이 칸을 채울
+ * 유일한 동기라 뒷절을 함께 적는다. (기획 §3 F5-2 · §12-2)
+ */
+const COLLECTION_GUIDE_HELP =
+  '여러 곡·여러 악장이 한 PDF 에 들어 있는 곡이면 적어 주세요 — 이 줄이 있어야 사용자 화면에 "(전곡 기준)"이 붙어요';
 const HIDDEN_HELP = "숨기면 검색·인기곡·작곡가 어디에도 나오지 않아요";
 
 /** 상세 응답 → 폼 값. 이탈 방지(05-E)의 '바뀐 게 있나' 비교 기준도 이걸로 만든다. */
@@ -550,6 +557,7 @@ export function WorkFormPage() {
                 value={form.collectionGuide}
                 onChange={(event) => setField("collectionGuide", event.target.value)}
               />
+              <span className="form-help">{COLLECTION_GUIDE_HELP}</span>
             </div>
 
             <div className="form-group">

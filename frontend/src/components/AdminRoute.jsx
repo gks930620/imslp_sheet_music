@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useDocumentTitle } from "../hooks/useDocumentTitle.js";
 import { InlineAlert } from "./common/InlineAlert.jsx";
 
 /** 00_공통 §4 세션 만료(관리) — 안내를 보여 주는 시간 */
@@ -20,6 +21,8 @@ export function AdminRoute({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [expiredFrom, setExpiredFrom] = useState(null);
+  // 00 §4-1 — 관리 화면 전부 한 제목. 구분 밖이라 구분 이름이 붙지 않는다(08 §5). 가드가 공통이라 새 관리 화면에서 빠지지 않는다
+  useDocumentTitle("관리 — 쉬운악보");
 
   const currentPath = location.pathname + location.search;
 

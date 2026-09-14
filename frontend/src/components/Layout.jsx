@@ -1,10 +1,18 @@
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useSection, useSectionPath } from "../hooks/useSection.js";
 import { SearchBar } from "./sheetmusic/SearchBar.jsx";
+import { SectionTabs } from "./sheetmusic/SectionTabs.jsx";
 import { AdminBanner } from "./sheetmusic/admin/AdminBanner.jsx";
 
 const IMSLP_URL = "https://imslp.org/";
+
+/**
+ * 00 §2-0 · 08 §1-1 — 구분 바가 안 보이는 화면의 첫 세그먼트: 관리 전체 · 로그인 · 범위 밖 유지 화면(마이페이지·커뮤니티·채팅).
+ * 경로로 판단해 렌더 자체를 하지 않는다 — CSS 로 숨기면 관리 화면에서 한 순간 깜빡인다(인수 조건 8-A 7).
+ */
+const OUT_OF_SECTION = new Set(["admin", "login", "signup", "mypage", "community", "rooms"]);
 
 function classNames(...values) {
   return values.filter(Boolean).join(" ");
@@ -16,41 +24,52 @@ export function Layout() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const section = useSection();
+  const sectionPath = useSectionPath();
 
   const handleLogout = async () => {
     await logout();
     setMobileOpen(false);
-    navigate("/");
+    navigate(sectionPath());
   };
 
   const isAdmin = Boolean(user?.roles?.includes("ADMIN"));
-  const isComposerActive = location.pathname.startsWith("/composers");
-  const isAdminActive = location.pathname.startsWith("/admin");
-  // 홈·검색 결과에는 본문에 큰 검색창이 있으므로 헤더 검색창을 숨긴다 (00 §2-1)
-  const showHeaderSearch = location.pathname !== "/" && location.pathname !== "/search";
+  const firstSegment = location.pathname.split("/")[1] ?? "";
+  // 구분 접두사를 뗀 나머지 경로 — "/piano/search" → "/search", "/piano" → ""
+  const relativePath = section ? location.pathname.slice(section.slug.length + 1) : location.pathname;
+  const isComposerActive = relativePath.startsWith("/composers");
+  const isAdminActive = firstSegment === "admin";
+  const showSectionTabs = !OUT_OF_SECTION.has(firstSegment);
+  // 홈·검색 결과에는 본문에 큰 검색창이 있으므로 헤더 검색창을 숨긴다 (00 §2-1). 옛 주소(/, /search)는 곧 리다이렉트되지만 깜빡임을 막는다
+  const isHomeOrSearch =
+    (section?.open && (relativePath === "" || relativePath === "/" || relativePath === "/search")) ||
+    location.pathname === "/" ||
+    location.pathname === "/search";
+  // 08 §2-4 — 준비 중 안내 화면의 헤더 검색만 from 을 붙인다(그 아래 하위 경로는 404 라 붙이지 않는다, 08 §3)
+  const searchFrom = section && !section.open && (relativePath === "" || relativePath === "/") ? section.slug : undefined;
 
   return (
     <div className="app-root">
       <header className="app-header">
         <div className="header-container">
-          <NavLink className="header-logo" to="/">
-            <span className="material-icons">piano</span>
+          <NavLink className="header-logo" to={sectionPath()}>
+            <span className="material-icons" aria-hidden="true">piano</span>
             <span>쉬운악보</span>
           </NavLink>
 
-          {showHeaderSearch ? (
+          {!isHomeOrSearch ? (
             <div className="header-search">
-              <SearchBar variant="compact" initialValue={searchParams.get("q") ?? ""} />
+              <SearchBar variant="compact" initialValue={searchParams.get("q") ?? ""} from={searchFrom} />
             </div>
           ) : null}
 
           <nav className={classNames("header-nav", mobileOpen && "mobile-open")} id="headerNav">
             <NavLink
               className={classNames("nav-item", isComposerActive && "active")}
-              to="/composers"
+              to={sectionPath("/composers")}
               onClick={() => setMobileOpen(false)}
             >
-              <span className="material-icons">people</span>
+              <span className="material-icons" aria-hidden="true">people</span>
               <span>작곡가</span>
             </NavLink>
             {isAdmin ? (
@@ -59,7 +78,7 @@ export function Layout() {
                 to="/admin"
                 onClick={() => setMobileOpen(false)}
               >
-                <span className="material-icons">admin_panel_settings</span>
+                <span className="material-icons" aria-hidden="true">admin_panel_settings</span>
                 <span>관리</span>
               </NavLink>
             ) : null}
@@ -75,7 +94,7 @@ export function Layout() {
             {status !== "loading" && user && (
               <>
                 <NavLink className="nav-item" to="/mypage" onClick={() => setMobileOpen(false)}>
-                  <span className="material-icons">person</span>
+                  <span className="material-icons" aria-hidden="true">person</span>
                   <span>마이페이지</span>
                 </NavLink>
                 <div className="user-info">
@@ -90,7 +109,7 @@ export function Layout() {
 
             {status !== "loading" && !user && (
               <NavLink className="login-btn" to="/login" onClick={() => setMobileOpen(false)}>
-                <span className="material-icons">login</span>
+                <span className="material-icons" aria-hidden="true">login</span>
                 <span>로그인</span>
               </NavLink>
             )}
@@ -101,6 +120,8 @@ export function Layout() {
           </button>
         </div>
       </header>
+
+      {showSectionTabs ? <SectionTabs /> : null}
 
       {isAdmin && isAdminActive ? <AdminBanner /> : null}
 

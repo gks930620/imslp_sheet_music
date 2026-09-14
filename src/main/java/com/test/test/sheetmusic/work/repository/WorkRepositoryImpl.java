@@ -18,6 +18,8 @@ import com.test.test.sheetmusic.work.Level;
 import com.test.test.sheetmusic.work.QWorkAliasEntity;
 import com.test.test.sheetmusic.work.QWorkCatalogNumberEntity;
 import com.test.test.sheetmusic.work.QWorkEntity;
+import com.test.test.sheetmusic.work.SearchIn;
+import com.test.test.sheetmusic.work.Section;
 import com.test.test.sheetmusic.work.WorkEntity;
 import com.test.test.sheetmusic.work.WorkNeedsWork;
 import com.test.test.sheetmusic.work.WorkRecommendationReview;
@@ -81,15 +83,16 @@ public class WorkRepositoryImpl implements WorkRepositoryCustom {
     /**
      * 02 §3-2 — 자격 곡(READY + 한국어 제목)을 먼저 채우고, 모자란 칸만 준비 중 곡으로 채운다.
      * <b>자격 곡이 0개면 폴백하지 않는다</b>(화면이 영역 자체를 감춘다). RESTRICTED·UNKNOWN 은 폴백에도 쓰지 않는다.
+     * 자격·폴백 모두 그 구분 안에서만 고른다(02 §0-7).
      */
     @Override
-    public List<WorkEntity> findPopular(int limit) {
-        List<WorkEntity> eligible = popularQuery(readyPredicate(), limit);
+    public List<WorkEntity> findPopular(Section section, int limit) {
+        List<WorkEntity> eligible = popularQuery(section, readyPredicate(), limit);
         if (eligible.isEmpty() || eligible.size() >= limit) {
             return eligible;
         }
         List<WorkEntity> result = new ArrayList<>(eligible);
-        result.addAll(popularQuery(preparingPredicate(), limit - eligible.size()));
+        result.addAll(popularQuery(section, preparingPredicate(), limit - eligible.size()));
         return result;
     }
 
@@ -113,11 +116,11 @@ public class WorkRepositoryImpl implements WorkRepositoryCustom {
     }
 
     /** 자격·폴백이 같은 정렬을 쓴다 — 다른 것은 상태 조건 하나뿐이다(02 §3-2 3번). */
-    private List<WorkEntity> popularQuery(BooleanExpression statusPredicate, int limit) {
+    private List<WorkEntity> popularQuery(Section section, BooleanExpression statusPredicate, int limit) {
         return queryFactory.selectFrom(WORK)
                 .join(WORK.composer, COMPOSER).fetchJoin()
                 .leftJoin(WORK.recommendedEdition, RECOMMENDED).fetchJoin()
-                .where(WORK.hidden.isFalse(), hasKoreanTitle(), statusPredicate)
+                .where(WORK.hidden.isFalse(), WORK.section.eq(section), hasKoreanTitle(), statusPredicate)
                 .orderBy(WORK.downloadCount.desc(), levelOrder().asc(), WORK.titleKo.asc(), WORK.id.asc())
                 .limit(limit)
                 .fetch();
@@ -148,12 +151,17 @@ public class WorkRepositoryImpl implements WorkRepositoryCustom {
         if (!condition.isIncludeHidden()) {
             where.and(WORK.hidden.isFalse());
         }
+        // 구분이 null 이면 걸지 않는다 — 관리 목록(§4-6)은 모든 구분을 한 화면에서 본다(기획 04 §3-6).
+        if (condition.getSection() != null) {
+            where.and(WORK.section.eq(condition.getSection()));
+        }
         if (condition.getComposerId() != null) {
             where.and(WORK.composer.id.eq(condition.getComposerId()));
         }
         if (condition.getTerms() != null) {
+            SearchIn searchIn = condition.getSearchIn() == null ? SearchIn.ALL : condition.getSearchIn();
             for (String term : condition.getTerms()) {
-                where.and(termMatches(term));
+                where.and(termMatches(term, searchIn));
             }
         }
         if (condition.isLevelNone()) {
@@ -179,14 +187,30 @@ public class WorkRepositoryImpl implements WorkRepositoryCustom {
         return where;
     }
 
-    /** 02 §3-1 2번: 곡 제목·별칭·작품번호·작곡가 이름·작곡가 별칭 중 하나에 부분 일치. */
-    private BooleanExpression termMatches(String term) {
+    /**
+     * 02 §3-1 2번: 단어가 어느 칸에 부분 일치해야 하는가 — 검색 기준 {@code in} 이 OR 묶음만 좁힌다(기획 04 §4-2).
+     * {@code ALL} 은 기준이 없던 시절과 같은 묶음(곡 칸 + 작곡가 칸)이고, 정규화·AND·정렬은 기준과 무관하게 그대로다.
+     */
+    private BooleanExpression termMatches(String term, SearchIn searchIn) {
+        return switch (searchIn) {
+            case TITLE -> titleFieldsContain(term);
+            case COMPOSER -> composerFieldsContain(term);
+            case ALL -> titleFieldsContain(term).or(composerFieldsContain(term));
+        };
+    }
+
+    /** 곡 칸 — 한국어 제목·원어 제목·곡 별칭·작품번호. 작품번호는 곡을 부르는 이름이라 여기다(02 §3-1 표). */
+    private BooleanExpression titleFieldsContain(String term) {
         return WORK.titleKoNormalized.contains(term)
                 .or(WORK.titleOriginalNormalized.contains(term))
-                .or(COMPOSER.nameKoNormalized.contains(term))
-                .or(COMPOSER.nameOriginalNormalized.contains(term))
                 .or(aliasContains(term))
-                .or(catalogContains(term))
+                .or(catalogContains(term));
+    }
+
+    /** 작곡가 칸 — 한글·원어 표기·작곡가 별칭. */
+    private BooleanExpression composerFieldsContain(String term) {
+        return COMPOSER.nameKoNormalized.contains(term)
+                .or(COMPOSER.nameOriginalNormalized.contains(term))
                 .or(composerAliasContains(term));
     }
 

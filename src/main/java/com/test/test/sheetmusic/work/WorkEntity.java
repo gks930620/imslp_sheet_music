@@ -59,6 +59,22 @@ public class WorkEntity {
     @JoinColumn(name = "composer_id", nullable = false)
     private ComposerEntity composer;
 
+    /**
+     * 악기 구분 (01_ERD §3-3, 02 §0-7 — 2026-09-10 추가). 곡은 정확히 하나의 구분에 속한다.
+     *
+     * <p>1차에 이 값을 바꾸는 경로는 없다(관리 API·수집 모두 — 01_ERD §9-2). 수집이 {@code NOT_PIANO_SOLO} 로 숨긴 곡도
+     * {@code PIANO} 그대로다: 숨김 사유는 부정형("피아노가 아니다")이라 그 안에 바이올린·총보·성악이 섞여 있어
+     * 자동으로 다른 구분이 될 수 없다(기획 04 §2-2).
+     *
+     * <p>{@code @JdbcTypeCode(VARCHAR)} 는 네이티브 {@code enum(...)} DDL 을 막는다(01_ERD §9-1 사고).
+     * {@code @ColumnDefault("'PIANO'")} 는 실데이터 위에 NOT NULL 컬럼을 얹을 때 기존 행을 채우는 근거다(§9-2).
+     */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "section", length = 30, nullable = false)
+    @ColumnDefault("'PIANO'")
+    private Section section;
+
     @Column(name = "title_ko", length = 300)
     private String titleKo;
 
@@ -138,11 +154,13 @@ public class WorkEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** {@code section} 을 주지 않으면 {@link Section#PIANO} — 관리 저장·수집·시드가 만드는 곡은 전부 피아노다(01_ERD §9-2). */
     @Builder
-    private WorkEntity(ComposerEntity composer, String titleKo, String titleOriginal, Level level,
+    private WorkEntity(ComposerEntity composer, Section section, String titleKo, String titleOriginal, Level level,
                        String compositionYear, String musicalKey, String movements, String movementPageGuide,
                        String collectionGuide, String imslpUrl, boolean hidden, HiddenReason hiddenReason) {
         this.composer = composer;
+        this.section = section == null ? Section.PIANO : section;
         changeTitles(titleKo, titleOriginal);
         this.level = level;
         this.compositionYear = compositionYear;

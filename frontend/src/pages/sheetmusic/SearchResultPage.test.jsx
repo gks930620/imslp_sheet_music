@@ -79,7 +79,7 @@ describe("SearchResultPage — 작곡가 카드·곡 카드", () => {
     ]);
     await findText("작곡가: 쇼팽 (Chopin, Frédéric)");
     const card = screen.getByRole("link", { name: /작곡가: 쇼팽/ });
-    expect(card).toHaveAttribute("href", "/composers/9");
+    expect(card).toHaveAttribute("href", "/piano/composers/9");
     expect(card).toHaveTextContent("곡 24개");
   });
 
@@ -99,7 +99,7 @@ describe("SearchResultPage — 작곡가 카드·곡 카드", () => {
       },
     ]);
     await findText("작곡가 2명 더 — 작곡가 목록에서 찾기");
-    expect(screen.getByRole("link", { name: /작곡가 목록에서 찾기/ })).toHaveAttribute("href", "/composers");
+    expect(screen.getByRole("link", { name: /작곡가 목록에서 찾기/ })).toHaveAttribute("href", "/piano/composers");
   });
 
   it("작곡가에 안 걸리면 카드 없음", async () => {
@@ -113,7 +113,7 @@ describe("SearchResultPage — 작곡가 카드·곡 카드", () => {
     await findText("녹턴 2번");
     expect(screen.getByText("'녹턴'으로 찾음")).toBeInTheDocument();
     expect(screen.getByText("준비 중")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /녹턴 2번/ })).toHaveAttribute("href", "/works/23");
+    expect(screen.getByRole("link", { name: /녹턴 2번/ })).toHaveAttribute("href", "/piano/works/23");
   });
 });
 
@@ -186,7 +186,7 @@ describe("SearchResultPage — 필터 ↔ URL", () => {
     const input = screen.getByPlaceholderText(PLACEHOLDER);
     await user.clear(input);
     await user.type(input, "월광{Enter}");
-    expect(getLocation().pathname).toBe("/search");
+    expect(getLocation().pathname).toBe("/piano/search");
     expect(getLocation().params.get("q")).toBe("월광");
     expect(getLocation().params.has("level")).toBe(false);
     expect(getLocation().params.has("page")).toBe(false);
@@ -211,12 +211,12 @@ describe("SearchResultPage — 빈 상태·오류", () => {
     await findText("'ㅁㄴㅇ'에 맞는 곡을 찾지 못했어요");
     expectText("다른 이름으로 불리기도 해요 — 예: 월광 / Moonlight / Op.27 No.2");
     expectText("작곡가 이름으로 찾아보세요");
-    expectText("1차는 피아노 독주곡만 있어요");
-    expect(screen.getByRole("link", { name: "작곡가 목록 보기" })).toHaveAttribute("href", "/composers");
+    expectText("지금은 피아노 악보만 있어요 (바이올린·오케스트라는 준비 중)");
+    expect(screen.getByRole("link", { name: "작곡가 목록 보기" })).toHaveAttribute("href", "/piano/composers");
     expect(screen.queryByRole("checkbox", { name: "바로 받기 가능한 곡만" })).not.toBeInTheDocument();
     await findText("인기곡 5");
     expect(findCall("/api/works/popular").params.get("limit")).toBe("5");
-    expect(screen.getAllByRole("link").filter((a) => /^\/works\/\d+$/.test(a.getAttribute("href")))).toHaveLength(5);
+    expect(screen.getAllByRole("link").filter((a) => /^\/piano\/works\/\d+$/.test(a.getAttribute("href")))).toHaveLength(5);
   });
 
   it("필터를 걸어 0건 → '이 조건에 맞는 곡이 없어요' + '필터 해제'(필터 바 유지)", async () => {

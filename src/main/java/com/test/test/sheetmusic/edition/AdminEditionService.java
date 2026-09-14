@@ -337,6 +337,8 @@ public class AdminEditionService {
         }
         return CopyrightDTOs.PendingListResult.builder()
                 .unfilteredTotal(editionRepository.countUnknownCopyright())
+                // 조건식을 여기로 복사하지 않는다 — §5-12 되돌리기와 같은 곳에서 세야 예고와 결과가 어긋나지 않는다.
+                .autoJudged(copyrightAutoJudgeService.revertible())
                 .editions(PageResponse.<CopyrightDTOs.PendingEdition>builder()
                         .content(content)
                         .page(page.getNumber())

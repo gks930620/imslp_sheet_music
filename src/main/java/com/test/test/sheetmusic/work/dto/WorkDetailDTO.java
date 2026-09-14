@@ -2,6 +2,7 @@ package com.test.test.sheetmusic.work.dto;
 
 import com.test.test.sheetmusic.edition.dto.EditionDTO;
 import com.test.test.sheetmusic.work.Level;
+import com.test.test.sheetmusic.work.Section;
 import com.test.test.sheetmusic.work.WorkStatus;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -23,6 +24,12 @@ public class WorkDetailDTO {
     private List<String> catalogNumbers;
     private Level level;
     private WorkStatus status;
+    /**
+     * 이 곡이 속한 악기 구분 (02 §0-7 · §3-3, 2026-09-10 추가). 화면은 주소의 구분과 다르면 <b>그 구분으로 전환해</b>
+     * 보여준다(기획 04 §1-4) — "찾을 수 없음" 으로 보내지 않는다. 목록 응답({@code WorkSummaryDTO})에는 없다:
+     * 목록은 전부 한 구분 안이라 화면이 주소에서 이미 안다.
+     */
+    private Section section;
     private List<String> aliases;
     private String compositionYear;
     private String musicalKey;

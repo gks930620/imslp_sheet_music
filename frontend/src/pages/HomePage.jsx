@@ -1,22 +1,37 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { SearchBar } from "../components/sheetmusic/SearchBar.jsx";
+import { SearchScopeSelect } from "../components/sheetmusic/SearchScopeSelect.jsx";
 import { WorkCard } from "../components/sheetmusic/WorkCard.jsx";
 import { ErrorState } from "../components/common/ErrorState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
+import { useSection, useSectionPath } from "../hooks/useSection.js";
+import { useDocumentTitle } from "../hooks/useDocumentTitle.js";
 import { callPublicApi } from "../lib/http.js";
+import { DEFAULT_SCOPE, SCOPE_EXAMPLES, buildSearchHref } from "../lib/searchScope.js";
+import { linkSection } from "../lib/sections.js";
 
-const EXAMPLES = ["월광", "쇼팽 녹턴", "K.545"];
-
-/** 01_홈.md — 검색창 하나가 주인공. 인기곡·작곡가는 독립 요청이라 각각 실패 처리한다. */
+/**
+ * 01_홈.md — 검색창 하나가 주인공. 인기곡·작곡가는 독립 요청이라 각각 실패 처리한다.
+ * 검색 기준은 화면이 잠시 드는 상태다(기획 04 §4-5 — 저장하지 않는다, 다시 들어오면 항상 "전체").
+ * 고르기만 해서는 검색이 일어나지 않는다 — 자리 문구와 예시 칩만 바뀐다(08 §4-4).
+ */
 export function HomePage() {
   const navigate = useNavigate();
+  const section = linkSection(useSection());
+  const sectionPath = useSectionPath();
+  const [scope, setScope] = useState(DEFAULT_SCOPE);
+  useDocumentTitle(`쉬운악보 — ${section.label}`);
 
-  const popular = useApiResource(() => callPublicApi("/api/works/popular?limit=10").then((r) => r.data ?? []), {
-    deps: [],
-  });
-  const composers = useApiResource(() => callPublicApi("/api/composers/featured?limit=8").then((r) => r.data ?? []), {
-    deps: [],
-  });
+  // 기획 04 §5 · 02 §7 — 인기곡·작곡가는 현재 구분의 것만
+  const popular = useApiResource(
+    () => callPublicApi(`/api/works/popular?section=${section.code}&limit=10`).then((r) => r.data ?? []),
+    { deps: [section.code] },
+  );
+  const composers = useApiResource(
+    () => callPublicApi(`/api/composers/featured?section=${section.code}&limit=8`).then((r) => r.data ?? []),
+    { deps: [section.code] },
+  );
 
   // 기획 §11-3-6 — 인기곡은 순위표가 아니라 견본 진열대다. 보여줄 곡이 없으면 자리를 남기지 않는다
   // (불러오는 중·실패는 자리를 지킨다 — 비어 있는 것과 못 불러온 것은 다른 사실이다)
@@ -28,16 +43,21 @@ export function HomePage() {
         <h1 className="home-title">쉬운악보</h1>
         <p className="home-subtitle">한국어로 검색하고 바로 받는 피아노 악보</p>
         <div className="home-search">
-          <SearchBar variant="large" autoFocus />
+          {/* 08 §4-2 — 세그먼트는 검색창 바로 위, 왼쪽 끝을 검색창에 맞춘다 (가운데 정렬 아님) */}
+          <div className="search-scope">
+            <SearchScopeSelect value={scope} onChange={setScope} />
+          </div>
+          <SearchBar variant="large" autoFocus scope={scope} />
         </div>
         <div className="home-examples">
           <span className="home-examples-label">예:</span>
-          {EXAMPLES.map((example) => (
+          {/* 08 §4-5 D9 — 칩은 기준을 따라 바뀌고, 누르면 현재 기준 그대로 검색한다(칩이 기준을 바꾸지 않는다) */}
+          {SCOPE_EXAMPLES[scope].map((example) => (
             <button
               key={example}
               className="example-chip"
               type="button"
-              onClick={() => navigate(`/search?q=${encodeURIComponent(example)}`)}
+              onClick={() => navigate(buildSearchHref(sectionPath("/search"), { q: example, scope }))}
             >
               {example}
             </button>
@@ -70,7 +90,7 @@ export function HomePage() {
         <section className="home-composers">
           <div className="section-title-row">
             <h2 className="section-title">작곡가</h2>
-            <Link className="btn btn-text" to="/composers">
+            <Link className="btn btn-text" to={sectionPath("/composers")}>
               모든 작곡가 보기
               <span className="material-icons" aria-hidden="true">
                 chevron_right
@@ -88,7 +108,7 @@ export function HomePage() {
           ) : composers.data?.length ? (
             <div className="composer-grid">
               {composers.data.map((composer) => (
-                <Link key={composer.id} className="composer-card" to={`/composers/${composer.id}`}>
+                <Link key={composer.id} className="composer-card" to={sectionPath(`/composers/${composer.id}`)}>
                   <span className="composer-card-name">{composer.nameKo || composer.nameOriginal}</span>
                   <span className="composer-card-count">{composer.workCount}곡</span>
                 </Link>

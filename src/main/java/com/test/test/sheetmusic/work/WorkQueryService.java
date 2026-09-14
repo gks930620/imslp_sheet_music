@@ -53,8 +53,12 @@ public class WorkQueryService {
 
     // ===== §3-1 검색 =====
 
-    public WorkSearchResponseDTO search(String q, String level, String pages, Boolean downloadable,
-                                        Pageable pageable) {
+    /**
+     * @param searchIn 검색 기준 {@code in} — 알 수 없는 값은 오류가 아니라 ALL 이다(02 §3-1 관용 규칙)
+     * @param section  악기 구분 — 생략 시 PIANO, 정의되지 않은 값은 400 (02 §0-7). 곡 목록·총계·작곡가 카드 전부 그 구분 안이다
+     */
+    public WorkSearchResponseDTO search(String q, String searchIn, String section, String level, String pages,
+                                        Boolean downloadable, Pageable pageable) {
         if (q == null || q.isBlank()) {
             throw FieldValidationException.of("q", "검색어를 입력해 주세요", q);
         }
@@ -65,10 +69,14 @@ public class WorkQueryService {
         if (terms.isEmpty()) {
             throw FieldValidationException.of("q", "검색어를 입력해 주세요", q);
         }
+        SearchIn scope = SearchIn.from(searchIn);
+        Section sectionScope = Section.from(section);
 
         WorkSearchCondition condition = WorkSearchCondition.builder()
                 .terms(terms)
                 .wholeTerm(SearchNormalizer.normalize(q))
+                .searchIn(scope)
+                .section(sectionScope)
                 .levels(Level.parseCsv(level))
                 .pages(PagesFilter.from(pages))
                 .downloadableOnly(Boolean.TRUE.equals(downloadable))
@@ -79,33 +87,41 @@ public class WorkQueryService {
         long unfilteredTotal = condition.hasFilters()
                 ? workRepository.count(condition.withoutFilters())
                 : page.getTotalElements();
+        // 0건 화면 [B] 재료 — 기준이 ALL 이면 질문 자체가 성립하지 않으므로 null 이고 쿼리도 더 돌리지 않는다(02 §3-1).
+        Long totalInAll = scope == SearchIn.ALL ? null : workRepository.count(condition.allScopeWithoutFilters());
 
-        // 작곡가별 공개 곡 수는 한 번만 집계해 카드 조립·정렬에 함께 쓴다(요청당 1회).
-        Map<Long, Long> counts = publicWorkCounts();
-        List<ComposerEntity> matched = matchingComposersWithPublicWorks(terms, counts);
+        // 곡명 기준은 "작곡가를 찾지 않기로 한 약속" 이라 작곡가 카드를 내리지 않는다(02 §3-1, 인수 조건 8-D 5).
+        List<ComposerEntity> matched = List.of();
         List<ComposerCardDTO> cards = new ArrayList<>();
-        for (ComposerEntity composer : matched.stream().limit(COMPOSER_CARD_LIMIT).toList()) {
-            cards.add(ComposerCardDTO.from(composer, counts.getOrDefault(composer.getId(), 0L)));
+        if (scope.searchesComposerFields()) {
+            // 작곡가별 공개 곡 수는 한 번만 집계해 카드 조립·정렬에 함께 쓴다(요청당 1회).
+            Map<Long, Long> counts = publicWorkCounts(sectionScope);
+            matched = matchingComposersWithPublicWorks(terms, counts);
+            for (ComposerEntity composer : matched.stream().limit(COMPOSER_CARD_LIMIT).toList()) {
+                cards.add(ComposerCardDTO.from(composer, counts.getOrDefault(composer.getId(), 0L)));
+            }
         }
 
         return WorkSearchResponseDTO.builder()
                 .q(q)
+                .in(scope.name())
                 .composers(cards)
                 .composerMatchCount(matched.size())
                 .unfilteredTotal(unfilteredTotal)
+                .totalInAll(totalInAll)
                 .works(toPageResponse(page,
-                        workDtoAssembler.toSummaries(page.getContent(), terms, condition.getWholeTerm())))
+                        workDtoAssembler.toSummaries(page.getContent(), terms, condition.getWholeTerm(), scope)))
                 .build();
     }
 
     // ===== §3-2 인기곡 =====
 
-    public List<WorkSummaryDTO> popular(int limit) {
+    public List<WorkSummaryDTO> popular(String section, int limit) {
         if (limit < 1) {
             throw new BusinessRuleException("limit 값이 올바르지 않아요: " + limit);
         }
         int capped = Math.min(limit, POPULAR_MAX_LIMIT);
-        return workDtoAssembler.toSummaries(workRepository.findPopular(capped));
+        return workDtoAssembler.toSummaries(workRepository.findPopular(Section.from(section), capped));
     }
 
     // ===== §3-3 곡 상세 =====
@@ -151,8 +167,9 @@ public class WorkQueryService {
         EditionEntity imslpCandidate = recommendedId != null
                 ? null : EditionDtoAssembler.imslpCandidateOf(otherEntities);
 
+        // 같은 작곡가의 다른 곡도 그 곡의 구분 안에서만 고른다(02 §0-7, 기획 04 §5).
         List<WorkEntity> sameComposer = workRepository.findSameComposerWorks(
-                work.getComposer().getId(), work.getId(), PageRequest.of(0, SAME_COMPOSER_LIMIT));
+                work.getComposer().getId(), work.getId(), work.getSection(), PageRequest.of(0, SAME_COMPOSER_LIMIT));
 
         return WorkDetailDTO.builder()
                 .id(work.getId())
@@ -163,6 +180,7 @@ public class WorkQueryService {
                         .map(WorkCatalogNumberEntity::getCatalogValue).toList())
                 .level(work.getLevel())
                 .status(work.status())
+                .section(work.getSection())
                 .aliases(work.getAliases().stream().map(WorkAliasEntity::getAlias).toList())
                 .compositionYear(work.getCompositionYear())
                 .musicalKey(work.getMusicalKey())
@@ -183,13 +201,15 @@ public class WorkQueryService {
 
     // ===== §3-8 작곡가의 곡 =====
 
-    public ComposerWorksResponseDTO composerWorks(Long composerId, String sort, String level, String pages,
-                                                  Boolean downloadable, Pageable pageable) {
+    /** 404 조건은 작곡가 존재 여부뿐이다 — 그 구분에 곡이 0개여도 200 + 빈 목록(02 §0-7). */
+    public ComposerWorksResponseDTO composerWorks(Long composerId, String section, String sort, String level,
+                                                  String pages, Boolean downloadable, Pageable pageable) {
         if (!composerRepository.existsById(composerId)) {
             throw EntityNotFoundException.of("작곡가", composerId);
         }
         WorkSearchCondition condition = WorkSearchCondition.builder()
                 .terms(List.of())
+                .section(Section.from(section))
                 .composerId(composerId)
                 .levels(Level.parseCsv(level))
                 .pages(PagesFilter.from(pages))
@@ -210,10 +230,10 @@ public class WorkQueryService {
 
     // ===== 내부 =====
 
-    /** 공개 곡이 1개 이상인 작곡가 id → 곡 수. */
-    public Map<Long, Long> publicWorkCounts() {
+    /** 그 구분에 공개 곡이 1개 이상인 작곡가 id → 곡 수. 카드의 {@code workCount} 도 이 값이라 구분 기준이다(02 §0-7). */
+    private Map<Long, Long> publicWorkCounts(Section section) {
         Map<Long, Long> counts = new HashMap<>();
-        for (ComposerWorkCount row : workRepository.countPublicWorksGroupedByComposer()) {
+        for (ComposerWorkCount row : workRepository.countPublicWorksGroupedByComposer(section)) {
             counts.put(row.getComposerId(), row.getWorkCount());
         }
         return counts;

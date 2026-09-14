@@ -85,4 +85,14 @@ public interface EditionRepository extends JpaRepository<EditionEntity, Long>, E
     @Query("select e from EditionEntity e where e.copyrightJudgedBy = :judgedBy"
             + " and e.koreaCopyright = com.test.test.sheetmusic.edition.KoreaCopyright.FREE")
     List<EditionEntity> findAutoJudged(@Param("judgedBy") String judgedBy);
+
+    /**
+     * 되돌릴 수 있는 판본 수 (02 §5-8-1 {@code revertibleEditions}). {@link #findAutoJudged(String)} 와
+     * <b>같은 조건</b>이라 예고(§5-8)와 실제 되돌리기(§5-12) 결과가 어긋날 수 없다.
+     * 대기함 조회 한 번마다 판본 행을 수천 건 읽지 않도록 개수만 센다
+     * ({@code idx_edition_korea_copyright} 로 충분해 인덱스를 더 두지 않는다 — ERD 변경 없음).
+     */
+    @Query("select count(e) from EditionEntity e where e.copyrightJudgedBy = :judgedBy"
+            + " and e.koreaCopyright = com.test.test.sheetmusic.edition.KoreaCopyright.FREE")
+    long countAutoJudged(@Param("judgedBy") String judgedBy);
 }

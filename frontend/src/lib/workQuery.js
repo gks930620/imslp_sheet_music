@@ -4,8 +4,11 @@
  */
 
 const FILTER_KEYS = ["level", "pages", "downloadable"];
-/** API 로 그대로 넘기는 쿼리 이름 */
-export const FORWARDED_KEYS = ["q", "sort", "level", "pages", "downloadable", "page"];
+/**
+ * API 로 그대로 넘기는 쿼리 이름. 화면 전용 쿼리(`from`)는 여기 없다 — 서버에 그런 파라미터가 없다(02 §0-5).
+ * 구분 `section` 도 여기 없다 — 주소 쿼리가 아니라 경로에서 읽어 화면이 따로 싣는다(02 §0-7).
+ */
+export const FORWARDED_KEYS = ["q", "in", "sort", "level", "pages", "downloadable", "page"];
 
 export function readWorkFilters(searchParams) {
   const levels = (searchParams.get("level") ?? "").split(",").filter(Boolean);

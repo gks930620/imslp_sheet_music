@@ -20,7 +20,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     // 핸드셰이크는 쿠키의 access_token으로 인증되므로, 임의 출처를 허용하면 CSWSH(교차출처 WebSocket 하이재킹)에
     // 노출된다. 와일드카드("*") 대신 신뢰 출처만 허용한다. 운영 도메인은 app.websocket.allowed-origins 로 주입.
-    @Value("${app.websocket.allowed-origins:http://localhost:3000,http://localhost:5173,http://localhost:8080}")
+    @Value("${app.websocket.allowed-origins:http://localhost:3000,http://localhost:5104,http://localhost:8104}")
     private String[] allowedOrigins;
 
     @Override

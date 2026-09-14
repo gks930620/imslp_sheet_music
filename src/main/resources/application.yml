@@ -116,6 +116,9 @@ jwt:
 
 # 초과 요청 본문을 삼켜야 413 JSON 이 클라이언트에 도달한다 (03 §5)
 server:
+  # 로컬 기본 포트. 프론트 개발 서버(frontend/vite.config.js)의 프록시 대상이 이 번호라
+  # 여기와 거기가 갈리면 화면은 뜨는데 API 만 502 가 된다. 운영은 application-prod.yml 의 ${PORT}.
+  port: 8104
   tomcat:
     max-swallow-size: 110MB
 

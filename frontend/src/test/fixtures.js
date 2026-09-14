@@ -629,7 +629,18 @@ export const pendingNoDeathYear = pendingCopyright({
   autoJudgeSkipReason: "LICENSE_NOT_REDISTRIBUTABLE",
 });
 
-/** §5-8 응답 data */
-export function pendingCopyrightResponse({ editions = [pendingCopyright(), pendingNoDeathYear], unfilteredTotal = 19, page = 0, totalElements = editions.length } = {}) {
-  return { unfilteredTotal, editions: pageResponse(editions, { page, totalElements }) };
+/**
+ * §5-8 응답 data.
+ *
+ * `autoJudged`(§5-8-1)는 **항상 있는 객체**다 — 되돌리기 버튼의 노출 조건이라 키가 없으면 화면이 분기를 못 한다.
+ * 기본값은 "되돌릴 것이 없음"(0/0): 대부분의 테스트는 자동 판정을 돌리지 않은 상태를 가정한다.
+ */
+export function pendingCopyrightResponse({
+  editions = [pendingCopyright(), pendingNoDeathYear],
+  unfilteredTotal = 19,
+  autoJudged = { revertibleEditions: 0, revertibleRecommendedWorks: 0 },
+  page = 0,
+  totalElements = editions.length,
+} = {}) {
+  return { unfilteredTotal, autoJudged, editions: pageResponse(editions, { page, totalElements }) };
 }

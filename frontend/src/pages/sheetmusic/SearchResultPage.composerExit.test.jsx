@@ -33,7 +33,7 @@ describe("SearchResultPage — 작곡가 카드 문구·0건일 때의 출구 (�
     ]);
     await findText("이 조건에 맞는 곡이 없어요");
     expectText("쇼팽의 곡은 10개 등록돼 있어요 — 조건 없이 모두 보기");
-    expect(screen.getByRole("link", { name: /조건 없이 모두 보기/ })).toHaveAttribute("href", "/composers/9");
+    expect(screen.getByRole("link", { name: /조건 없이 모두 보기/ })).toHaveAttribute("href", "/piano/composers/9");
   });
 
   it("작곡가 카드가 없으면 그 한 줄도 없다", async () => {

@@ -199,6 +199,8 @@
   --layout-narrow-width: 800px;        /* 곡 상세·폼 화면 본문 폭 */
   --layout-form-width: 450px;          /* 로그인 카드 (기존) */
   --header-height: 64px;
+  --section-tabs-height: 48px;         /* 헤더 아래 악기 구분 바 (모바일 2줄 / 데스크톱 1줄 공통 높이).
+                                          sticky 아님 — 헤더만 sticky (08 §2-5) */
   --touch-target: 44px;                /* 모바일 최소 터치 영역 */
   --icon-size-sm: 16px;
   --icon-size-md: 20px;

@@ -34,18 +34,27 @@ public class WorkDtoAssembler {
 
     /** 검색이 아닌 목록(인기곡·작곡가의 곡·같은 작곡가 곡)은 matchedAlias 가 항상 null 이다. */
     public List<WorkSummaryDTO> toSummaries(List<WorkEntity> works) {
-        return toSummaries(works, List.of(), null);
+        return toSummaries(works, List.of(), null, SearchIn.ALL);
     }
 
-    public List<WorkSummaryDTO> toSummaries(List<WorkEntity> works, List<String> terms, String wholeTerm) {
+    /**
+     * 검색 목록 — {@code searchIn} 은 matchedAlias 의 계산만 바꾼다(02 §3-1 "기준에 따라 달라지는 응답 필드").
+     * {@code COMPOSER} 면 곡 별칭이 검색 대상이 아니므로 항상 null 이고, {@code TITLE} 이면 "주 필드" 에서
+     * 작곡가 이름·작곡가 별칭을 뺀다 — 그 기준으로 찾지 않은 칸이 단어를 설명한다고 보면 별칭이 이유 없이 사라진다.
+     */
+    public List<WorkSummaryDTO> toSummaries(List<WorkEntity> works, List<String> terms, String wholeTerm,
+                                            SearchIn searchIn) {
         if (works.isEmpty()) {
             return List.of();
         }
+        // COMPOSER 는 곡 별칭을 찾지 않으므로 설명할 단어가 없다(항상 null). 작곡가 별칭은 ALL 에서만 "주 필드" 다.
+        List<String> aliasTerms = searchIn.searchesTitleFields() ? terms : List.of();
         List<Long> ids = works.stream().map(WorkEntity::getId).toList();
         Map<Long, List<WorkAliasEntity>> aliases = groupAliases(workAliasRepository.findByWorkIds(ids));
         Map<Long, List<WorkCatalogNumberEntity>> catalogs =
                 groupCatalogs(workCatalogNumberRepository.findByWorkIds(ids));
-        Map<Long, List<ComposerAliasEntity>> composerAliases = loadComposerAliases(works, terms);
+        Map<Long, List<ComposerAliasEntity>> composerAliases = searchIn == SearchIn.ALL
+                ? loadComposerAliases(works, terms) : Map.of();
 
         List<EditionEntity> recommendedEditions = new ArrayList<>();
         for (WorkEntity work : works) {
@@ -76,7 +85,7 @@ public class WorkDtoAssembler {
                             ? null : editionDtoAssembler.publicPreviewUrl(recommended, files))
                     .matchedAlias(matchedAlias(work, aliases.getOrDefault(work.getId(), List.of()),
                             workCatalogs, composerAliases.getOrDefault(work.getComposer().getId(), List.of()),
-                            terms, wholeTerm))
+                            aliasTerms, wholeTerm, searchIn))
                     // 02 §2-2-1 — 검색·인기곡·작곡가의 곡·같은 작곡가 곡이 이 한 자리에서 같은 값을 받는다.
                     .scopeNote(ScopeNoteDTO.from(work))
                     .build());
@@ -94,7 +103,7 @@ public class WorkDtoAssembler {
     private String matchedAlias(WorkEntity work, List<WorkAliasEntity> workAliases,
                                 List<WorkCatalogNumberEntity> workCatalogs,
                                 List<ComposerAliasEntity> composerAliases,
-                                List<String> terms, String wholeTerm) {
+                                List<String> terms, String wholeTerm, SearchIn searchIn) {
         if (terms == null || terms.isEmpty()) {
             return null;
         }
@@ -106,7 +115,7 @@ public class WorkDtoAssembler {
             }
         }
         for (String term : terms) {
-            if (explainedByPrimaryFields(work, workCatalogs, composerAliases, term)) {
+            if (explainedByPrimaryFields(work, workCatalogs, composerAliases, term, searchIn)) {
                 continue;
             }
             for (WorkAliasEntity alias : workAliases) {
@@ -118,18 +127,22 @@ public class WorkDtoAssembler {
         return null;
     }
 
+    /** "주 필드" = 그 기준이 실제로 찾는 칸 중 별칭을 뺀 것 — TITLE 이면 작곡가 이름·작곡가 별칭은 주 필드가 아니다. */
     private boolean explainedByPrimaryFields(WorkEntity work, List<WorkCatalogNumberEntity> workCatalogs,
-                                             List<ComposerAliasEntity> composerAliases, String term) {
+                                             List<ComposerAliasEntity> composerAliases, String term,
+                                             SearchIn searchIn) {
         if (contains(work.getTitleKoNormalized(), term) || contains(work.getTitleOriginalNormalized(), term)) {
             return true;
         }
-        if (contains(work.getComposer().getNameKoNormalized(), term)
-                || contains(work.getComposer().getNameOriginalNormalized(), term)) {
-            return true;
-        }
-        for (ComposerAliasEntity alias : composerAliases) {
-            if (contains(alias.getAliasNormalized(), term)) {
+        if (searchIn.searchesComposerFields()) {
+            if (contains(work.getComposer().getNameKoNormalized(), term)
+                    || contains(work.getComposer().getNameOriginalNormalized(), term)) {
                 return true;
+            }
+            for (ComposerAliasEntity alias : composerAliases) {
+                if (contains(alias.getAliasNormalized(), term)) {
+                    return true;
+                }
             }
         }
         for (WorkCatalogNumberEntity catalog : workCatalogs) {

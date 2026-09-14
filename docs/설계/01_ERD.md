@@ -104,6 +104,7 @@ normalize(s):
 |---|---|---|---|
 | id | BIGINT PK | N | |
 | composer_id | BIGINT FK→composer | N | |
+| section | VARCHAR(30) | N | **2026-09-10 추가.** enum `Section`: `PIANO / VIOLIN / ORCHESTRA`. **곡은 정확히 하나의 구분에 속한다**(기획 04 §5). 기본값 `PIANO`(`@ColumnDefault("'PIANO'")`) — 1차에 값을 바꾸는 경로가 **없다**(§9-2). `hidden_reason = NOT_PIANO_SOLO` 로 숨긴 곡도 `PIANO` 그대로다: 숨김 사유는 부정형(`피아노가 아니다`)이라 그 안에 바이올린·총보·성악이 섞여 있어 **자동으로 다른 구분이 될 수 없다**(기획 04 §2-2). 계약은 02 §0-7 |
 | title_ko | VARCHAR(300) | Y | 한국어 대표 제목. 비면 "보완 필요" |
 | title_ko_normalized | VARCHAR(300) | Y | |
 | title_original | VARCHAR(300) | N | 원어 제목(IMSLP Work Title) |
@@ -296,6 +297,7 @@ IMSLP 의 `div.we` 블록 하나에 파일이 여러 개면 파일마다 행을 
 
 | enum | 값 | 사용처 |
 |---|---|---|
+| `Section` (2026-09-10 신설) | PIANO(피아노) / VIOLIN(바이올린) / ORCHESTRA(오케스트라) — **NULL 없음**, 기본 PIANO | work.section, 공개 API 의 `section` 파라미터(02 §0-7) |
 | `Level` | BEGINNER(입문) / ELEMENTARY(초급) / INTERMEDIATE(중급) / ADVANCED(고급) — NULL = 미정 | work.level, 필터 |
 | `KoreaCopyright` | FREE / RESTRICTED / UNKNOWN | edition, 뱃지 |
 | `LicenseCode` | PD / CC0 / CC_BY / CC_BY_SA / CC_BY_NC / CC_BY_NC_SA / CC_BY_NC_ND / OTHER | edition.imslp_license_code |
@@ -469,6 +471,7 @@ else                                                        → UNKNOWN
 | 2026-09-08 | `download_log.edition_id` **NOT NULL 해제**(§3-7) | `ALTER TABLE download_log ALTER COLUMN edition_id SET NULL;` | `ALTER TABLE download_log MODIFY edition_id BIGINT NULL;` | 판본 삭제가 500(`NULL not allowed for column "EDITION_ID"`) |
 | 2026-09-08 | `seed_load.seed_type` 에 **enum 값 `COLLECTION_GUIDE` 추가**(§3-10·§6 백필) | `ALTER TABLE seed_load ALTER COLUMN seed_type ENUM('COMPOSER','WORK','COLLECTION_GUIDE') NOT NULL;` | `ALTER TABLE seed_load MODIFY seed_type ENUM('COMPOSER','WORK','COLLECTION_GUIDE') NOT NULL;` | **애플리케이션이 기동하지 못한다.** 기존 DB 의 컬럼은 `ENUM('COMPOSER','WORK')` 라 `SeedLoader` 의 조회가 `Value not permitted for column "('COMPOSER','WORK')": "COLLECTION_GUIDE" [22030-224]` 로 터진다(값을 쓰기 전에 **읽기부터** 깨진다) |
 | 2026-09-08 | **enum 컬럼 16개를 네이티브 `ENUM(...)` → `VARCHAR` 로 고정**(§9-1, 근거 `03_기술결정.md` §17-6) | 아래 §9-1 문장 | 아래 §9-1 문장 | 다음에 enum 상수를 하나 추가할 때마다 위와 같은 기동 실패·조회 실패가 반복된다(테스트는 `create-drop` 이라 끝까지 초록) |
+| 2026-09-10 | `work.section` **NOT NULL 컬럼 신설 + 기존 50행 백필**(§3-3·§9-2) | `ALTER TABLE work ADD COLUMN section VARCHAR(30) DEFAULT 'PIANO' NOT NULL;` | `ALTER TABLE work ADD COLUMN section VARCHAR(30) NOT NULL DEFAULT 'PIANO';` | 최악의 경우 **모든 곡 API 가 500** 이 된다 — `ddl-auto: update` 는 DDL 실패를 **삼키므로**(로그만), 컬럼 없이 기동한 뒤 첫 조회에서 `Column "SECTION" not found` 가 난다. 자세한 것은 §9-2 |
 
 살아 있는 로컬 DB(`data/devdb`)에는 위 두 건 중 **`seed_load` 건이 2026-09-08 에 적용됐다**(백업 후 실행, 기동 확인). §9-1 은 backend-dev 적용 대기.
 새 DB(테스트 `create-drop`, 초기화 후 로컬, 첫 배포 MySQL)는 엔티티대로 생성되므로 실행할 필요가 없다.
@@ -556,3 +559,33 @@ ALTER TABLE files      MODIFY file_usage         VARCHAR(30);
 - 이 변경을 하고 나면 **앞으로 enum 상수 추가는 순수 추가형**이 되어 이 대장에 적을 일이 없다.
 - 회귀 가드: `SchemaEnumColumnTypeIntegrationTest` — 생성된 스키마에 `DATA_TYPE = 'ENUM'` 인 컬럼이 하나도 없어야 한다.
   (`create-drop` 테스트가 이 사고를 못 잡는다는 §17-5 의 구멍을, "엔티티가 만드는 DDL 자체"를 보게 해서 메운다.)
+
+### 9-2. `work.section` — NOT NULL 컬럼을 실데이터 50곡 위에 얹는 방법 (2026-09-10)
+
+**문제 셋.**
+
+1. `ddl-auto: update` 는 **NOT NULL 을 완화하지 못하고, 기존 행에 값을 채워 주지도 않는다.**
+2. 그런데 `update` 는 **DDL 실패를 예외로 올리지 않는다** — 로그 한 줄만 남기고 기동을 계속한다. 그래서 컬럼이 없는 채로 서버가 뜨고, **첫 곡 조회부터 전부 500** 이 된다. `seed_load` 사고(위 표 2번째 줄)보다 나쁘다: 그때는 기동이 멈춰서 바로 알았다.
+3. 로컬 `data/devdb` 에 **실데이터 곡 50건**이 이미 있다.
+
+**대책 — 엔티티에 `@ColumnDefault("'PIANO'")` 를 붙이고, 그래도 대장에 등재한다.**
+
+- `@ColumnDefault` 를 붙이면 Hibernate 가 만드는 DDL 이 `... varchar(30) default 'PIANO' not null` 이 되어 **기존 행이 있어도 ALTER 가 성공할 수 있다**(H2·MySQL 모두 DEFAULT 가 있으면 기존 행을 그 값으로 채운다). 새로 만드는 DB(테스트 `create-drop`·초기화 후 로컬·첫 배포 MySQL)와 마이그레이션한 DB의 **스키마가 한 글자도 안 달라진다**(`recommended_edition_reviewed` 의 `@ColumnDefault("false")` 와 같은 패턴).
+- **그래도 대장에 넣는 이유**: 위 2번(조용한 실패) 때문이다. "될 것"에 서버 50곡을 걸지 않는다. 손으로 먼저 실행해 두면 Hibernate 가 할 일이 없어져 **어느 쪽이든 결과가 같아진다.**
+
+**backend-dev 실행 절차 (이 순서를 지킨다 — 새 코드 기동이 마지막이다).**
+
+```sql
+-- 0) data/ 백업 (기존 data_backup_* 방식 그대로)
+-- 1) 컬럼 추가 (H2, 서버를 내린 상태에서)
+ALTER TABLE work ADD COLUMN section VARCHAR(30) DEFAULT 'PIANO' NOT NULL;
+-- 2) 백필 확인 — DEFAULT 로 이미 채워졌어야 한다. 혹시 비었으면 채운다
+UPDATE work SET section = 'PIANO' WHERE section IS NULL OR section = '';
+-- 3) 확인: 50 (전부 PIANO 한 줄이어야 한다)
+SELECT section, COUNT(*) FROM work GROUP BY section;
+-- 4) 새 코드 기동 → GET /api/works/search?q=월광 이 200 인지 확인
+```
+
+- **인덱스를 만들지 않는다.** 1차에는 모든 행이 `PIANO` 라 카디널리티가 1이고, 옵티마이저가 쓰지 않는다. `work` 는 수백 행이고 검색은 이미 `LIKE '%…%'` 풀스캔이다(§3-3 주석). 구분이 실제로 둘 이상 열려 행이 갈릴 때 `idx_work_section` 을 그때 추가한다 — 그건 **추가형**이라 이 대장에 적을 일도 없다.
+- **`works.csv` 에 `section` 열을 만들지 않는다.** 시드 곡 50개는 전부 피아노이고, 로더는 **삽입 전용**이라 열을 더해도 이미 적재된 행에는 닿지 않는다 — `collection_guide` 처럼 **백필 패스를 하나 더** 만들어야 하는데, §6 이 "시드가 관리자 입력을 언제 덮는지 아무도 설명 못 하게 되므로 구멍을 여러 개 뚫지 않는다" 고 못 박았다. 여기서는 그럴 필요가 아예 없다: 엔티티 기본값이 `PIANO` 라 **로더가 만드는 새 곡도 `PIANO`** 이고, 이미 적재된 곡은 위 SQL 한 줄이 끝낸다. 시드로 다른 구분의 곡을 넣게 되는 날 CSV 에 열을 더한다.
+- **1차에 `section` 값을 바꾸는 경로는 없다.** 관리 API(§4-8)에도 넣지 않고(기획 04 §3-6·§9 8-7 — 구분 배정은 구분을 여는 시점의 과제), 수집도 `NOT_PIANO_SOLO` 를 구분으로 바꾸지 않는다(기획 04 §2-2). 그래서 **테스트가 다른 구분의 곡을 만들 때만 리포지토리로 직접 저장한다**(02 §0-7 의 "1차에는 걸러낼 대상이 없다" 문제).

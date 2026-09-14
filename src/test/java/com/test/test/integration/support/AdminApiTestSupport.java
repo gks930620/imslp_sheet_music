@@ -212,6 +212,34 @@ public abstract class AdminApiTestSupport extends ApiIntegrationTestSupport {
         return data(adminGet(tokens, "/api/admin/works/{id}", workId).andExpect(status().isOk()));
     }
 
+    /**
+     * §4-7 응답 → §4-8 요청 본문. <b>관리 화면이 하는 일과 같다</b> — PUT 은 전체 교체라, 한 필드만 바꾸는
+     * 시나리오는 나머지를 현재 값으로 채워야 한다(응답에 없는 값은 폼도 못 보낸다).
+     */
+    protected Map<String, Object> workSaveBodyFrom(JsonNode detail) {
+        return json(
+                "composerId", detail.path("composer").path("id").asLong(),
+                "titleKo", text(detail, "titleKo"),
+                "titleOriginal", text(detail, "titleOriginal"),
+                "catalogNumbers", strings(detail.path("catalogNumbers")),
+                "aliases", strings(detail.path("aliases")),
+                "level", text(detail, "level"),
+                "compositionYear", text(detail, "compositionYear"),
+                "musicalKey", text(detail, "musicalKey"),
+                "movements", text(detail, "movements"),
+                "movementPageGuide", text(detail, "movementPageGuide"),
+                "collectionGuide", text(detail, "collectionGuide"),
+                "imslpUrl", text(detail, "imslpUrl"),
+                "hidden", detail.path("hidden").asBoolean());
+    }
+
+    /** 곡을 숨기거나 다시 보이게 한다 (§4-8 전체 교체 PUT — 관리 화면의 숨김 토글과 같은 경로). */
+    protected void setWorkHidden(Tokens tokens, long workId, boolean hidden) throws Exception {
+        Map<String, Object> body = workSaveBodyFrom(getWork(tokens, workId));
+        body.put("hidden", hidden);
+        adminPut(tokens, "/api/admin/works/{id}", body, workId).andExpect(status().isOk());
+    }
+
     // ===== 파일·판본 (§5-1 ~ 5-3, 5-6) =====
 
     protected byte[] samplePdfBytes() {

@@ -9,7 +9,7 @@ import { expectNoText, expectText, findText } from "../../test/text.js";
 // 04_작곡가.md 화면 B — /composers/:id?sort=&level=&pages=&downloadable=&page=
 // 작곡가 정보 GET /api/composers/9, 곡 목록 GET /api/composers/9/works (검색 결과와 같은 FilterBar·쿼리 이름)
 const WORKS = /\/api\/composers\/9\/works/;
-const INFO = /\/api\/composers\/9$/;
+const INFO = /\/api\/composers\/9(\?|$)/;
 
 function renderDetail(route = "/composers/9", { info = composerDetail(), works = composerWorksResponse(), infoStatus = 200 } = {}) {
   mockFetch([
@@ -65,7 +65,7 @@ describe("ComposerDetailPage — 곡 목록·정렬·필터", () => {
     await findText("녹턴 2번");
     expectText("곡 24개");
     expectNoText("곡 24개 중");
-    expect(screen.getByRole("link", { name: /녹턴 2번/ })).toHaveAttribute("href", "/works/23");
+    expect(screen.getByRole("link", { name: /녹턴 2번/ })).toHaveAttribute("href", "/piano/works/23");
     expectNoText("쇼팽 (Chopin, Frédéric)");
     expectText("Op.9 No.2");
     expectNoText("으로 찾음");

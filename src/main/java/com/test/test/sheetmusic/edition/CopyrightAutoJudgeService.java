@@ -2,6 +2,7 @@ package com.test.test.sheetmusic.edition;
 
 import com.test.test.sheetmusic.edition.dto.AutoJudgeDTOs;
 import com.test.test.sheetmusic.edition.repository.EditionRepository;
+import com.test.test.sheetmusic.work.repository.WorkRepository;
 import java.time.Instant;
 import java.time.Year;
 import java.time.ZoneId;
@@ -41,13 +42,16 @@ public class CopyrightAutoJudgeService {
     private static final int CHUNK_SIZE = 500;
 
     private final EditionRepository editionRepository;
+    private final WorkRepository workRepository;
     private final TransactionTemplate transactionTemplate;
     private final ZoneId timezone;
 
     public CopyrightAutoJudgeService(EditionRepository editionRepository,
+                                     WorkRepository workRepository,
                                      TransactionTemplate transactionTemplate,
                                      @Value("${app.timezone}") String timezone) {
         this.editionRepository = editionRepository;
+        this.workRepository = workRepository;
         this.transactionTemplate = transactionTemplate;
         this.timezone = ZoneId.of(timezone);
     }
@@ -186,6 +190,23 @@ public class CopyrightAutoJudgeService {
      */
     public CopyrightAutoJudge.SkipReason skipReasonOf(EditionEntity edition) {
         return verdictOf(edition, currentYear()).getSkipReason();
+    }
+
+    /**
+     * 지금 §5-12 로 되돌릴 수 있는 것이 얼마나 남았는지 (§5-8-1 {@code autoJudged}).
+     * <b>계산만 하고 아무것도 바꾸지 않는다.</b> 되돌릴 것이 없으면 {@code 0/0} 이고 {@code null} 이 아니다.
+     *
+     * <p>이 값이 {@link #undo()} 와 <b>같은 곳에</b> 사는 이유는 {@link #skipReasonOf} 가 §5-11 과 판정 함수를
+     * 공유하는 이유와 같다 — 조건식이 대기함 쪽에 복사돼 있으면 <b>예고와 결과가 어긋날 수 있다</b>.
+     * 되돌리기는 수백~수천 판본을 한 번에 공개 재배포로 여는 동작이라 예고가 틀리면 안 된다.
+     */
+    @Transactional(readOnly = true)
+    public AutoJudgeDTOs.RevertibleSummary revertible() {
+        return AutoJudgeDTOs.RevertibleSummary.builder()
+                .revertibleEditions(editionRepository.countAutoJudged(CopyrightAutoJudge.AUTO_JUDGED_BY))
+                .revertibleRecommendedWorks(
+                        workRepository.countAutoJudgedRecommendations(CopyrightAutoJudge.AUTO_JUDGED_BY))
+                .build();
     }
 
     // ===== 내부 =====

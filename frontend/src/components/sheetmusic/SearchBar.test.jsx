@@ -46,7 +46,7 @@ describe("SearchBar", () => {
     const user = userEvent.setup();
     const { getLocation } = renderWithProviders(<SearchBar />, { route: "/" });
     await user.type(screen.getByPlaceholderText(LARGE_PLACEHOLDER), "  월광 {Enter}");
-    expect(getLocation().pathname).toBe("/search");
+    expect(getLocation().pathname).toBe("/piano/search");
     expect(getLocation().params.get("q")).toBe("월광");
   });
 
@@ -55,7 +55,7 @@ describe("SearchBar", () => {
     const { getLocation } = renderWithProviders(<SearchBar />, { route: "/" });
     await user.type(screen.getByPlaceholderText(LARGE_PLACEHOLDER), "쇼팽 녹턴");
     await user.click(screen.getByRole("button", { name: "검색" }));
-    expect(getLocation().pathname).toBe("/search");
+    expect(getLocation().pathname).toBe("/piano/search");
     expect(getLocation().params.get("q")).toBe("쇼팽 녹턴");
   });
 
@@ -63,7 +63,7 @@ describe("SearchBar", () => {
     const user = userEvent.setup();
     const { getLocation } = renderWithProviders(<SearchBar variant="compact" />, { route: "/works/21" });
     await user.type(screen.getByPlaceholderText(COMPACT_PLACEHOLDER), "K.545{Enter}");
-    expect(getLocation().pathname).toBe("/search");
+    expect(getLocation().pathname).toBe("/piano/search");
     expect(getLocation().params.get("q")).toBe("K.545");
   });
 

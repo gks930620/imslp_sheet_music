@@ -25,8 +25,8 @@ public class CorsConfig {
         // 허용할 Origin 목록
         configuration.setAllowedOrigins(Arrays.asList(
                 "http://localhost:3000",   // React 개발 서버
-                "http://localhost:5173",   // Vite 개발 서버
-                "http://localhost:8080"   // 로컬 개발
+                "http://localhost:5104",   // Vite 개발 서버 (frontend/vite.config.js 의 port 와 같아야 한다)
+                "http://localhost:8104"   // 로컬 개발 (application.yml 의 server.port)
                 // 운영 도메인 추가 예시:
                 // "https://your-domain.com",
                 // "https://www.your-domain.com"

@@ -164,6 +164,13 @@ public final class CopyrightDTOs {
     @AllArgsConstructor
     public static class PendingListResult {
         private long unfilteredTotal;
+
+        /**
+         * 지금 §5-12 로 되돌릴 수 있는 잔량 (§5-8-1). <b>항상 있다</b> — 없으면 0/0 이다.
+         * 필터·페이지와 무관한 화면 전체의 상태라 {@code unfilteredTotal} 과 같은 자리에 둔다.
+         */
+        private AutoJudgeDTOs.RevertibleSummary autoJudged;
+
         private PageResponse<PendingEdition> editions;
     }
 }

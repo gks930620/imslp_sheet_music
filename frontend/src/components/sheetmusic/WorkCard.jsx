@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { LevelChip } from "./LevelChip.jsx";
 import { StatusBadge } from "./StatusBadge.jsx";
+import { useSectionPath } from "../../hooks/useSection.js";
 import { formatWorkScopeLine, isCollectionWork } from "../../lib/format.js";
 
 function composerText(composer) {
@@ -10,10 +11,13 @@ function composerText(composer) {
 }
 
 /**
- * 00_공통 §3-2 곡 카드. 카드 전체가 곡 상세 링크.
+ * 00_공통 §3-2 곡 카드. 카드 전체가 곡 상세 링크 — 현재 구분 아래 주소(`/{구분}/works/:id`, 02 §0-5).
+ * 구분은 주소에서 직접 읽는다(03 §21-6 — prop 으로 받으면 빠뜨린 호출부의 링크만 구분 밖으로 나간다).
  * variant="compact" 는 홈 인기곡·같은 작곡가의 다른 곡 (썸네일·원어 제목 없음)
  */
 export function WorkCard({ work, variant = "full", rank, hideComposer = false, hideAlias = false }) {
+  const sectionPath = useSectionPath();
+  const href = sectionPath(`/works/${work.id}`);
   const title = work.titleKo || work.titleOriginal;
   const showOriginal = Boolean(work.titleKo && work.titleOriginal);
   const catalog = (work.catalogNumbers ?? []).join(" · ");
@@ -21,7 +25,7 @@ export function WorkCard({ work, variant = "full", rank, hideComposer = false, h
   if (variant === "compact") {
     const composer = hideComposer ? "" : work.composer?.nameKo || work.composer?.nameOriginal || "";
     return (
-      <Link className="work-card work-card-compact" to={`/works/${work.id}`}>
+      <Link className="work-card work-card-compact" to={href}>
         {rank ? <span className="work-card-rank">{rank}</span> : null}
         <span className="work-card-title">{title}</span>
         {composer ? <span className="work-card-composer">{composer}</span> : null}
@@ -40,7 +44,7 @@ export function WorkCard({ work, variant = "full", rank, hideComposer = false, h
   const isCollection = isCollectionWork(work.scopeNote);
 
   return (
-    <Link className="work-card" to={`/works/${work.id}`}>
+    <Link className="work-card" to={href}>
       <span className="work-card-thumb">
         {work.previewUrl ? (
           <img src={work.previewUrl} alt={`${title} 미리보기`} />

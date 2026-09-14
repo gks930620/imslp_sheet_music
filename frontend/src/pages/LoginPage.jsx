@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useDocumentTitle } from "../hooks/useDocumentTitle.js";
 import { getErrorMessage } from "../lib/format.js";
 
 export function LoginPage() {
+  useDocumentTitle("로그인 — 쉬운악보"); // 00 §4-1 — 구분 밖 화면이라 구분 이름이 붙지 않는다
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
