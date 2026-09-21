@@ -158,8 +158,16 @@ public class EditionDtoAssembler {
         return fileSize != null && fileSize >= EditionDTO.LARGE_FILE_BYTES;
     }
 
+    /**
+     * 다운로드 주소 (02 §3-4) — 곡 상세·받은 악보가 <b>같은 함수</b>로 만든다.
+     * 주소를 두 곳에서 조립하면 경로가 바뀔 때 한쪽만 고쳐져 버튼이 404 를 연다.
+     */
+    public static String downloadUrl(EditionEntity edition) {
+        return "/api/editions/" + edition.getId() + "/download";
+    }
+
     private static String downloadUrl(EditionEntity edition, boolean downloadable) {
-        return downloadable ? "/api/editions/" + edition.getId() + "/download" : null;
+        return downloadable ? downloadUrl(edition) : null;
     }
 
     /**

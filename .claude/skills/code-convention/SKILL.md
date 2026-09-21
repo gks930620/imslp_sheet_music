@@ -50,6 +50,12 @@ public record CommunityDTO(Long id, String title) {}
   - 외부 HTTP 호출(소셜 로그인 검증, 결제, 알림, 외부 조회 등)을 트랜잭션 안에 넣지 않는다.
   - 이유: ① 느리고 통제 못 하는 네트워크 대기 동안 **DB 커넥션·락을 붙잡아** 동시 요청 시 커넥션 풀 고갈 위험. ② **HTTP는 롤백이 안 되므로** 트랜잭션에 넣어도 원자성 이득이 없다(비용만 있음).
   - 패턴: **외부 호출로 결과를 먼저 받고 → 그 결과로 짧은 트랜잭션을 열어 DB 저장/갱신만.** (트랜잭션은 짧게, DB 조작만 담는다.)
+- **클래스 레벨 기본 트랜잭션(`@Transactional(readOnly = true)`)을 떼는 두 가지 예외** ⭐
+  - **① 외부 I/O가 메서드 안에 섞여 있을 때** — 위 규칙("외부 API 호출은 트랜잭션 밖")을 지키려면 그 메서드 자체가 트랜잭션 밖에 있어야 하므로, 클래스 기본 트랜잭션을 걸지 않고 DB 작업만 별도 컴포넌트로 쪼갠다. 예: `DownloadService`(바이트 로드는 트랜잭션 밖, DB 읽기·쓰기는 `DownloadMetaReader`/`recordDownload`로 분리 — 같은 이유로 `AdminEditionService`도 선례가 있다).
+  - **② 동시 요청이 DB 제약(unique 등)을 위반할 수 있을 때** — 제약 위반은 그 트랜잭션을 **rollback-only**로 만들어, 같은 트랜잭션 안에서 예외를 잡아도 커밋이 `UnexpectedRollbackException`으로 다시 터진다(트랜잭션 전체가 무효가 되는 스프링/JPA의 동작이라 `try/catch`로 피할 수 없다). "제약에 걸렸다 = 이미 원하는 상태"를 판단하려면 그 확인이 **트랜잭션이 끝난 뒤** 이뤄져야 하므로, 넣기(쓰기)를 별도 컴포넌트가 자기 트랜잭션으로 열고 닫고, 실패는 트랜잭션 밖에서 호출자가 받는다. 예: `FavoriteService`(넣기는 `FavoriteWriter.insertIfAbsent`가 독립 트랜잭션으로 하고, `DataIntegrityViolationException`은 `FavoriteService`가 트랜잭션 밖에서 받아 "이미 켜져 있는지"를 확인한다).
+  - **②는 "호출자가 트랜잭션 밖"일 때만 쓸 수 있다.** 이미 열린 트랜잭션 안에서 부르면 넣기를 떼어 내도 `REQUIRES_NEW`가 되는데, 그러면 ⓐ 커밋이 둘로 갈리고 ⓑ 안쪽이 **다른 커넥션**이라 바깥 트랜잭션이 잠근 FK 부모 행을 자기가 기다릴 수 있고 ⓒ (MySQL REPEATABLE READ) 위반 뒤 다시 읽어도 겹친 요청이 커밋한 행이 안 보일 수 있다. 그때는 분리가 아니라 **읽고-나서-넣는 창 자체를 없앤다** — 넣기를 DB 단일 문장 upsert(`INSERT … ON DUPLICATE KEY UPDATE`)로. 사례와 근거: `docs/설계/03_기술결정.md` §26(`MyLibraryRecorder`).
+  - 이 둘이 아니면 클래스 레벨 `@Transactional(readOnly = true)`를 그대로 쓴다 — "쓰기 메서드가 있다"는 것만으로는 떼는 근거가 되지 않는다.
+  - 이렇게 뗀 클래스는 **javadoc에 같은 근거를 남긴다**(다음 사람이 "컨벤션 위반"으로 되돌리지 않도록 — `DownloadService`·`FavoriteService`의 클래스 javadoc이 그 예).
 - **Entity**: 도메인 로직은 엔티티 안에 둔다 (`entity.update(...)`, `entity.softDelete()`, `entity.isWrittenBy(user)`). 서비스에서 필드를 직접 setter로 만지지 않는다.
 - **Repository**: 조회는 가능하면 **DTO로 직접 프로젝션**(QueryDSL)해서 N+1을 구조적으로 피한다. 엔티티를 컨트롤러까지 노출하지 않는다.
 
@@ -167,6 +173,7 @@ public record CommunityDTO(Long id, String title) {}
 - 응답 검증은 상태코드만 보지 말고 **핵심 필드(JSON)까지** 확인한다("200만 오고 데이터는 틀림"을 잡기 위해).
 - 시간 의존 로직은 시간을 파라미터로 주입해 결정적으로 테스트(`createReview(user, dto, now)`).
 - 순서/랜덤/시간 의존 테스트 금지. 로컬 테스트 DB는 H2(인메모리) — §5-2.
+- **unique 제약 위에서 "조회 → 없으면 삽입"을 하는 경로에는 경합 테스트를 하나씩 둔다** ⭐ (같은 위험이 두 곳인데 테스트는 한 곳에만 있었던 적이 있다 — qa 8차). 방식은 **스레드가 아니라 스텁**이다: "있나?"를 **한 번만** 거짓으로 답하게 해 겹친 순간을 고정하고, 그 뒤의 물음은 실제 DB를 보게 한다(스레드 경합은 뜨는 날·안 뜨는 날이 갈려 회귀 가드가 못 된다). 제약 위반은 트랜잭션을 rollback-only로 만들므로 **테스트 트랜잭션이 없는 기반**(`NonTransactionalApiTestSupport`)에서 돌린다. 선례 2개와 점검 목록: `docs/설계/03_기술결정.md` §26-3.
 - 예외: 순수 유틸/알고리즘 등 컨트롤러를 거치지 않는 로직은 필요하면 작은 단위테스트 허용(드묾).
 
 ---

@@ -114,6 +114,7 @@
 - enum 은 대문자 문자열(`"INTERMEDIATE"`). 화면 문구 변환(중급 등)은 프론트 책임.
 - 없는 값은 `null` 로 내려준다(키 생략 안 함). 빈 목록은 `[]`.
 - 페이지: `page`(0-base, 기본 0), `size`(기본 20, 최대 100). 화면은 `size` 를 보내지 않는다(20 고정).
+- **범위 밖 페이지는 200 + 빈 `content` — 목록 API 전부 공통** (2026-09-21 명시, senior-dev — qa 8차 결함 2). `page` 에 어떤 정수가 와도(`2147483647` 까지) 500 이 되지 않는다. `page` 는 **요청한 값을 그대로 되비추고**(서버가 몰래 다른 페이지로 옮기면 화면의 페이지 이동이 "눌러도 그 자리" 가 된다), `totalElements` 는 그 페이지와 무관한 실제 수다. 페이지 번호는 **주소창에 그대로 드러나는 값**이라 사용자가 손으로 고치고 링크로 공유한다 — 목록마다 답이 갈리면(어떤 목록은 200, 어떤 목록은 500) 그건 계약이 아니다. 검증: `WorkSearchApiIntegrationTest`(§3-1), `MyLibraryPageBoundsIntegrationTest`(§10-2·§10-3).
 - 파일 크기 바이트(`fileSize`), 쪽수 정수(`pageCount`). "2.4MB"/"12쪽" 포맷은 프론트.
 - 미리보기 이미지 URL 은 `previewUrl` = `/uploads/{저장파일명}.png` — **기존 `FileServingController` 프록시** 가 서빙(permitAll, 로컬/버킷 공통). 별도 이미지 API 를 두지 않는다(03 §2).
 
@@ -280,6 +281,16 @@
 | GET | `/api/composers/featured` | 홈 작곡가 바로가기(곡 수 순 8명) | 01 |
 | GET | `/api/composers/{id}` | 작곡가 상세 | 04-B |
 | GET | `/api/composers/{id}/works` | 작곡가의 곡 목록(정렬·필터·페이지) | 04-B |
+| GET | `/api/works/recent` | **최근 본 곡의 "지금 정보"**(브라우저가 든 id 목록 → 요약, §3-9) | 01 |
+
+### 회원 (USER — 로그인만 하면 된다, ADMIN 전용 아님) — 2026-09-20 신설 §10
+
+| 메서드 | 경로 | 설명 | 화면 |
+|---|---|---|---|
+| PUT | `/api/me/favorites/{workId}` | 즐겨찾기 켜기(멱등) | 03 |
+| DELETE | `/api/me/favorites/{workId}` | 즐겨찾기 끄기(멱등) | 03, 09 |
+| GET | `/api/me/library/favorites` | 내 악보 › 즐겨찾기 탭(최근 추가순·20개 페이지) | 09 |
+| GET | `/api/me/library/downloads` | 내 악보 › 받은 악보 탭(곡 단위 한 줄·최근 받은 순) | 09 |
 
 ### 관리자 (ADMIN)
 
@@ -422,6 +433,25 @@
 > "다른 판본" **줄(row)** 에서는 이 문구를 반복하지 않는다 — 같은 줄의 저작권 뱃지가 이미 그 사실을 말하고,
 > 긴 문구를 작은 썸네일 자리에 넣으면 줄이 깨진다. 문구는 **추천 판본 카드에서만** 보인다.
 > 계약 검증: `WorkDetailPage.previewGate.test.jsx`, `EditionPreviewExposureIntegrationTest`.
+
+### 2-4. `EditionBriefDTO` (판본 한 줄 설명 — 2026-09-20 신설, 화면정의 09 §1-2)
+
+받은 악보 항목의 **`받은 판본: 전체 악보 · 전곡 · 5쪽 · 1.1MB`** 한 줄을 만드는 값만 담는다. `EditionDTO`(§2-3)를 쓰지 않는 이유: 그 DTO 의 절반(미리보기·저작권 표기·IMSLP 링크·`downloadable`)은 이 줄에 쓰이지 않고, **판본이 삭제된 뒤에도 남아야 하는 값**(01_ERD §3-12 스냅샷)은 여기 다섯뿐이다.
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| id | long\|null | 지금도 살아 있는 판본이면 그 id. **삭제됐으면 `null`**(설명만 스냅샷으로 남아 있다) |
+| kind | `COMPLETE_SCORE\|PARTS\|ARRANGEMENT` | |
+| scope | `COMPLETE\|MOVEMENT` | |
+| movementNumber | int\|null | |
+| pageCount | int\|null | |
+| fileSize | long\|null | |
+
+```json
+{ "id": 301, "kind": "COMPLETE_SCORE", "scope": "COMPLETE", "movementNumber": null, "pageCount": 5, "fileSize": 1153434 }
+```
+
+- 화면 문구는 기존 `formatEditionKind`·`formatEditionScope`·`formatFileSizeCompact` 로 만든다(서버는 문장을 만들지 않는다 — §2-2-1 과 같은 원칙). `sectionLabel` 은 넣지 않는다: 스냅샷 대상이 아니고(01_ERD §3-12), `scope=MOVEMENT`·`movementNumber=null` 이면 화면이 `발췌` 로 폴백한다(§3-4 접미사 규칙과 같은 말).
 
 ---
 
@@ -592,6 +622,10 @@
 > **열린 문구 하나(기획 §10-10)** — "N개"의 숫자를 화면에 그대로 보일지는 designer·product-planner 의 결정이다.
 > 계약은 숫자를 **주고**, 쓸지 말지는 화면이 정한다(0 인지 아닌지는 어느 쪽이든 필요하다).
 | sameComposerWorks | WorkSummaryDTO[] | 같은 작곡가의 다른 공개 곡, download_count DESC, 최대 5 |
+| favorited | boolean | **2026-09-20 신설(기획 05 §1-1, 화면정의 09 §6 S5).** 이 요청의 **로그인 주체**가 이 곡을 즐겨찾기했는가. **비로그인이면 언제나 `false`**(401 이 아니다 — 곡 상세는 공개 API 그대로다). 화면은 이 값으로 버튼을 그린다 |
+
+> **왜 즐겨찾기 상태를 곡 상세에 싣나 (S5).** 따로 물으면 버튼이 **꺼짐 → 켜짐으로 깜빡인다**(화면정의 03 §3-6-2). 곡 상세 응답이 끝난 순간 버튼 상태도 확정돼 있어야 "다시 누를 필요가 없다"가 눈에 보인다(인수 조건 8-B 3).
+> 공개 API 에 사용자별 값이 하나 붙는다는 뜻이라, **캐시 헤더를 붙이지 않는 것이 계약이다**(지금도 안 붙인다). 목록 응답(`WorkSummaryDTO`)에는 **넣지 않는다** — 곡 카드에 즐겨찾기 표시를 두지 않기로 확정했고(기획 05 §10 8-6, 인수 조건 8-G 5), 쓰는 곳 없는 필드를 먼저 두지 않는다(§0-7 의 `section` 판단과 같은 원칙).
 
 ```json
 { "success": true, "message": "성공", "data": {
@@ -610,7 +644,7 @@
     "imslpFileUrl": "https://imslp.org/wiki/Special:ImagefromIndex/00014",
     "downloadable": true, "largeFile": false, "downloadUrl": "/api/editions/301/download" },
   "otherEditions": [ ], "imslpOnlyCount": 88, "imslpCandidateEdition": null, "downloadableOtherCount": 0,
-  "sameComposerWorks": [ WorkSummaryDTO… ]
+  "sameComposerWorks": [ WorkSummaryDTO… ], "favorited": false
 } }
 ```
 
@@ -639,6 +673,7 @@
 | `pdfFileId == null` | 404 `NOT_FOUND` ("파일이 없는 판본이에요") |
 | `koreaCopyright != FREE` | 403 `COPYRIGHT_RESTRICTED` |
 | files 행은 있는데 바이트를 못 읽음 | 503 `FILE_UNAVAILABLE` — **다운로드 수 안 올림** |
+| 같은 계정이 **같은 곡을 같은 순간에** 두 번 받음 | **둘 다 200** — 받은 악보 줄은 1개, 집계(`download_log`·두 `download_count`)는 **각각 다 든다**(아래 2026-09-21) |
 | 정상 | 200, `Content-Type: application/pdf`, `Content-Length`, `Content-Disposition: attachment; filename="score-{editionId}.pdf"; filename*=UTF-8''{퍼센트인코딩 파일명}` |
 
 **파일명 규칙(01 §9 8-9 확정, 2026-09-08 접미사 추가, 2026-09-08 괄호 생략 3조건 확정 — 기획 01 §12-1)**: `{작곡가 한글 표기 또는 원어 표기} - {한국어 대표 제목 또는 원어 제목}{ (대표 작품번호)}{ 편곡}{ N악장}.pdf`
@@ -689,6 +724,10 @@
 
   왜 필요한가: §0-6 의 세 상한(작곡가 100자·제목 300자·작품번호 100자)을 그대로 더하면 500자가 넘고, 한글은 UTF-8 3바이트라 1,000바이트를 넘긴다(qa 실측 413자·1,019바이트, `Content-Disposition` 2,923바이트). **ext4 는 파일명 255바이트, NTFS·APFS 는 255자**가 한계라 브라우저가 저장에 실패하거나 제멋대로 잘라 낸다(잘리는 규칙은 브라우저마다 다르다). 204바이트면 한계 안이면서 브라우저 중복 접미사 `" (1)"` 여유까지 남는다. 실데이터 최장 제목이 41자라 지금은 아무도 다치지 않지만, 수집이 가져오는 원어 제목은 길다. 계약 검증: `DownloadFileNameLimitIntegrationTest`.
 - 성공 시 같은 요청 안에서 `edition.download_count`, `work.download_count` 를 1 올리고 `download_log` 1행 INSERT(바이트 확보 뒤, 스트리밍 전 짧은 트랜잭션).
+- **2026-09-20 — 그 요청에 로그인 주체가 있으면 같은 트랜잭션에서 `user_work_download` 를 upsert 한다**(01_ERD §3-12, 기획 05 §3-1). 인증은 **선택**이다: 이 API 는 계속 `permitAll` 이고 **비로그인도 200 이며 집계에도 계속 든다**(인수 조건 8-D 3 — 이것이 회귀다). 토큰이 붙어 있으면 그 사람의 받은 악보에 남고, 아니면 아무 데도 남지 않는다. **사용감은 한 글자도 바뀌지 않는다** — 클릭 1번, 확인 창 없음, 로그인 요구 없음(기획 05 §3-1).
+  - `HEAD` 는 지금처럼 **아무것도 쓰지 않는다** — `download_log` 도 `user_work_download` 도. 사전 확인이 받은 악보에 줄을 만들면 "받지도 않은 곡"이 선반에 선다.
+  - **2026-09-21 — 겹친 요청도 200 이다**(senior-dev, qa 8차 결함 1). 같은 계정이 같은 곡을 **처음** 받는 두 요청이 겹치면 뒤에 온 요청의 선반 넣기가 `uk_user_work_download` 에 걸린다(큰 PDF 를 나란히 받으면 실제로 겹친다 — qa 실측 3/3). 그때의 계약은 **둘 다 200, 줄 1개, `download_log` 2행, `edition.download_count`·`work.download_count` 각 +2** 다. **이 API 의 본체는 파일이고 선반은 부산물이다** — 부산물의 경합이 사용자가 받으려던 파일을 막으면 안 되고, 선반 때문에 **집계까지 함께 롤백되면 안 된다**(그 요청은 실제로 파일을 받아 갔다). 구현 방향은 03 §26. 검증: `MyLibraryDownloadRaceIntegrationTest`.
+  - 저작권 게이트가 먼저다: 403·404·503 은 기록 자체가 없다. **"이용 제한" 판본은 받은 악보의 "다시 받기"로도 이 문을 통과하지 못한다**(§10-3 은 그 판본의 `downloadUrl` 을 아예 만들지 않고, 만들어 불러도 여기서 403 이다 — 인수 조건 8-D 8).
 - **이 API 가 판본 바이트를 얻는 유일한 공개 경로다(2026-09-07 확정, senior-dev).** 공용 파일 API(`GET /api/files`, `/api/files/paths`, `/api/files/{id}/content`)는 `ref_type=EDITION` 파일을 다루지 않는다 — 목록/경로에서 제외하고 `/content` 는 404. (순번 fileId 로 저작권 게이트를 우회할 수 있으면 §9-1 재배포 정책이 무의미해진다. 업로드 쪽은 `FileService.verifyOwnership` 이 이미 EDITION 을 막고 있다.)
 - **`/uploads/{저장파일명}` 프록시도 판본 PDF 를 주지 않는다(2026-09-08 확정 — qa 3차 결함 1).** 그 경로는 **미리보기 PNG 전용**이고 판본 PDF 는 404 다. 표는 §0-4. "유일한 공개 경로"라고 써 놓고 게이트 없는 문을 하나 더 열어 두면 계약이 아니라 문서일 뿐이다.
 
@@ -740,6 +779,32 @@
 | level / pages / downloadable / page / size | §3-1 과 동일 |
 
 응답: `{ "unfilteredTotal": 24, "works": PageResponse<WorkSummaryDTO> }`. 404 없는 작곡가. 숨김 곡 제외.
+
+### 3-9. `GET /api/works/recent?ids=23,21,22&section=PIANO` — 최근 본 곡의 "지금 정보" (2026-09-20 신설)
+
+브라우저가 저장한 **곡 id 목록**을 주면 **지금의 요약**을 돌려준다. 기획 05 §4-2 의 두 요구가 이 한 문으로 닫힌다: "보이는 정보는 저장한 순간의 것이 아니라 **지금의 것**", "내려간 곡은 **보이지 않는다**(눌러서 404 를 만나지 않는다)".
+
+| 항목 | 계약 |
+|---|---|
+| 인증 | **없다(공개).** 최근 본 곡은 로그인과 무관하다(기획 05 §0-4). `/api/works/**` GET permitAll 그대로 |
+| `ids` | 쉼표로 이은 곡 id. **요청한 순서가 곧 응답 순서**(브라우저가 든 "최근에 본 순"을 서버가 다시 정하지 않는다) |
+| 개수 | **최대 10.** 넘치면 **앞 10개만** 쓴다(400 이 아니다 — `limit`·`size` 상한과 같은 관용, §3-2·§0-4) |
+| 걸러지는 것 | 없는 곡 · **숨김 곡** · **다른 구분의 곡**. 조용히 빠진다(오류 아님) — 그래서 **응답 길이가 요청보다 짧을 수 있다** |
+| 이상한 값 | 숫자가 아닌 토큰·빈 토큰·중복은 **무시**한다(중복은 첫 번째만). 브라우저 저장은 오염될 수 있고 화면 규칙이 "조용히 숨김"이다 |
+| `ids` 가 비었거나 전부 걸러짐 | **200 + `[]`** (화면은 영역 자체를 만들지 않는다 — 01_홈 상태표) |
+| `ids` 파라미터 자체가 없음 | 400 `MISSING_PARAMETER`(§0-2 표준). 화면은 저장된 곡이 0개면 **요청을 보내지 않는다** |
+| `section` | §0-7 그대로(생략 시 `PIANO`, 정의되지 않은 값 400) |
+
+응답 `data: WorkSummaryDTO[]` — `matchedAlias` 는 항상 null, `scopeNote` 는 §2-2-1 규칙대로.
+
+```
+GET /api/works/recent?ids=23,21,999&section=PIANO
+→ data: [ {id:23 …}, {id:21 …} ]      // 999 는 없는 곡이라 빠졌다. 순서는 요청 그대로
+```
+
+- **왜 `POST` 가 아닌가**: 읽기이고, 부수효과가 없고, 10개 id 는 주소에 들어간다. 그래서 캐시·재시도·로그가 전부 평범하게 동작한다.
+- **왜 화면이 id 만 저장하나**: 제목·뱃지를 저장하면 "저장한 순간의 정보"가 화면에 남아 관리자가 고친 제목·열린 곡이 반영되지 않는다(인수 조건 8-E 7·8). 저장 규칙은 `03_기술결정.md` §23.
+- 계약 검증: `RecentWorksApiIntegrationTest`, `HomePage.recentWorks.test.jsx`.
 
 ---
 
@@ -1551,3 +1616,139 @@ harpsichord/keyboard 로 분류하는데, 인벤션·평균율·안나 막달레
 - 구분을 4개 이상으로 늘리는 것 — 기획 §9 8-1 이 3개로 확정.
 - `WorkSummaryDTO.section` — 쓰는 곳이 없다(§0-7).
 - **`frontend/src/test/fixtures.js` 갱신** — `searchResponse()` 에 `in`·`totalInAll` 이, `workDetail()` 에 `section` 이 아직 없다. 그 파일에 **커밋되지 않은 이전 라운드 변경**이 있어 이번에 손대지 않았고, 새 테스트는 픽스처 위에 필드를 얹어 쓴다(`SearchResultPage.scope.test.jsx` 의 `response()`). **커밋 직후 senior-dev 가 픽스처를 명세에 맞춘다.**
+
+---
+
+## 10. 회원 개인화 API — 즐겨찾기 · 내 악보 (2026-09-20 신설)
+
+> 기준: 기획 `05_즐겨찾기_받은악보_최근본곡_기획서.md` §1·§2·§3·§5·§7·§9(인수 조건 60개), 화면정의 `09_내악보_즐겨찾기_받은악보.md`(§6 S1~S7) · `03_곡상세` §3-6 · `01_홈`.
+> 최근 본 곡은 **로그인과 무관**하므로 회원 API 가 아니다 — 공개 §3-9 에 있다.
+
+### 10-0. 이 절 전체의 공통 규칙
+
+| 항목 | 계약 |
+|---|---|
+| 경로 | 전부 `/api/me/**` |
+| **사용자 식별** | **주소·쿼리·본문 어디에도 사용자 id 를 받지 않는다.** 주체는 토큰(SecurityContext)에서만 꺼낸다(컨벤션 §4-1) — 그래서 "남의 것 보기" 는 **시도할 주소가 없다**(인수 조건 8-C 9). 관리 API 에도 "누가 뭘 받았나" 를 주는 문을 만들지 않았다 |
+| 인증 | **로그인만 하면 된다**(USER·ADMIN 동일). 비로그인은 **401 `NOT_AUTHENTICATED`** — `SecurityConfig` 의 `anyRequest().authenticated()` 가 그대로 받는다. **`/api/me/**` 를 permitAll 목록에 넣지 않는 것이 계약이다** |
+| 숨김 곡 | 목록·숫자·상태 판정 어디에도 나오지 않는다(기획 §F2-6). 행은 지우지 않으므로 숨김이 풀리면 **그 자리로 돌아온다**(인수 조건 8-C 7·8-D 10) |
+| `section` | §0-7 그대로 — 생략 시 `PIANO`, 정의되지 않은 값 400. 내 악보는 **구분 안의 화면**이다(기획 05 §5-1) |
+| 페이지 | `page`(0-base) · `size`(기본 20, 최대 100) — §0-4 그대로. 화면은 `size` 를 보내지 않는다. **범위 밖 페이지는 두 탭 모두 200 + 빈 목록**(§0-4 공통 규칙, `page=2147483647` 까지) — `counts` 와 `totalElements` 는 그대로 실제 수다 |
+| 삭제·비우기 | **없다**(기획 05 §3-4, 인수 조건 8-D 9). 받은 악보를 지우는 API 를 만들지 않는다 |
+
+### 10-1. `PUT /api/me/favorites/{workId}` — 즐겨찾기 켜기 / `DELETE` — 끄기
+
+| 메서드 | 성공 | 본문 |
+|---|---|---|
+| PUT | **200** | `data: { "workId": 21, "favorited": true }` |
+| DELETE | **204** | 없음(관리 DELETE 관례와 같다) |
+
+| 조건 | 결과 |
+|---|---|
+| 비로그인 | 401 `NOT_AUTHENTICATED` |
+| 없는 곡 · **숨김 곡** | 404 `NOT_FOUND` — `"곡을 찾을 수 없어요"`(§0-2 문구 규칙) |
+| 이미 켜져 있는데 다시 PUT | **200**. 행을 만들지 않고 **`created_at` 도 갱신하지 않는다**(목록 순서가 바뀌면 "최근에 넣은 순" 이 거짓말이 된다) |
+| 꺼져 있는데 DELETE | **204**(없던 것을 껐다 — 오류가 아니다) |
+| 준비 중·이용 제한·확인 중 곡 | **된다.** 다운로드 버튼이 없어도 즐겨찾기는 켜진다(기획 05 §1-4, 인수 조건 8-A 4) |
+| 요청 본문 | **없다.** 토글이 아니라 **상태를 지정**하는 두 문이다 |
+
+- **왜 토글(`POST /toggle`)이 아닌가 — 이 결정이 인수 조건 8-B 4 를 지탱한다.** 비로그인 → 로그인 → 복귀 완성(03 §22)은 "돌아와서 한 번 켠다" 인데, 새로고침·중복 실행이 **한 번이라도** 더 일어나면 토글은 **꺼진다.** 멱등한 PUT/DELETE 면 몇 번 불려도 결과가 같아서, 화면의 중복 방지(§22 의 take)와 계약의 멱등성이 **이중으로** 같은 것을 지킨다.
+- 부수효과는 즐겨찾기뿐이다 — **다운로드 수는 오르지 않는다**(인수 조건 8-A 6).
+- 계약 검증: `FavoriteApiIntegrationTest`.
+
+### 10-2. `GET /api/me/library/favorites?section=PIANO&page=0` — 내 악보 › 즐겨찾기 탭
+
+```json
+{ "success": true, "message": "성공", "data": {
+  "counts": { "favorites": 12, "downloads": 5 },
+  "works": { "content": [ WorkSummaryDTO… ], "page": 0, "size": 20, "totalElements": 12, "totalPages": 1, "first": true, "last": true }
+} }
+```
+
+| 항목 | 계약 |
+|---|---|
+| 정렬 | **`work_favorite.created_at DESC, work_favorite.id DESC`** — "최근에 넣은 순"(기획 05 §2-2). id 를 2순위로 두는 이유: 같은 밀리초에 두 개를 넣어도 순서가 확정된다(테스트가 순서를 단언할 수 있어야 한다) |
+| 담기는 것 | 그 계정 · **그 구분** · 숨김 아닌 곡. `WorkSummaryDTO` 는 다른 목록과 **한 글자도 다르지 않다**(`matchedAlias` 는 null, `scopeNote` 는 §2-2-1) |
+| `counts` | **두 탭의 숫자를 늘 함께 준다**(화면정의 09 §6 S3) — 어느 탭에 있든 탭 머리의 숫자 2개를 그려야 하기 때문이다. 값은 **숨김 제외 전체 수**이고 `page`·`size` 와 무관하다. `counts.favorites` 는 이 응답 `works.totalElements` 와 **항상 같다** |
+| 페이지 범위 밖 | 200 + 빈 `content`(`totalElements` 는 그대로) — 화면이 "이 페이지에는 곡이 없어요" 를 그린다(09 상태표). **`page` 값의 크기와 무관하다**(§0-4): `2147483647` 도 200 이고 `page` 는 요청한 값을 그대로 되비춘다. 검증 `MyLibraryPageBoundsIntegrationTest` |
+
+### 10-3. `GET /api/me/library/downloads?section=PIANO&page=0` — 내 악보 › 받은 악보 탭
+
+**곡 단위 한 줄**이다(기획 05 §3-2). 같은 곡을 몇 번 받아도 한 줄이고, 줄의 날짜는 **가장 최근에 받은 날**이다.
+
+```json
+{ "data": {
+  "counts": { "favorites": 12, "downloads": 5 },
+  "items": { "content": [
+    { "work": { WorkSummaryDTO… },
+      "downloadedAt": "2026-09-12T08:12:00Z",
+      "receivedEdition": { "id": 301, "kind": "COMPLETE_SCORE", "scope": "COMPLETE", "movementNumber": null, "pageCount": 5, "fileSize": 1153434 },
+      "redownloadState": "AVAILABLE",
+      "redownloadUrl": "/api/editions/301/download",
+      "alternativeEdition": null }
+  ], "page": 0, "size": 20, "totalElements": 5, "totalPages": 1, "first": true, "last": true }
+} }
+```
+
+`ReceivedWorkDTO`
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| work | WorkSummaryDTO | 곡 카드. 다른 목록과 같다 |
+| downloadedAt | string | 가장 최근에 받은 시각(ISO UTC). 화면이 `오늘 받음`·`9월 12일 받음` 으로 옮긴다(00 §4 날짜 규칙) |
+| receivedEdition | EditionBriefDTO\|null | **"받은 판본: …" 줄의 재료**(§2-4). 아래 "무엇을 담나" |
+| redownloadState | `AVAILABLE\|RECOMMENDATION_CHANGED\|UNAVAILABLE` | 화면 3상태(09 §1-2-2 ①②③) |
+| redownloadUrl | string\|null | **"다시 받기" 버튼이 실제로 여는 주소.** ①② 는 그때 받은 판본, ③-a 는 **지금 추천 판본**, ③-b 는 `null` |
+| alternativeEdition | EditionBriefDTO\|null | **③-a 일 때만** 값이 있다 — "지금 추천 판본: …" 줄. 그 밖에는 `null` |
+
+**상태 판정 (한 함수로 계산한다)**
+
+```
+received            = user_work_download.last_edition_id 가 가리키는 판본 (삭제됐으면 null)
+receivedDownloadable= received != null && received.pdf_file_id != null && received.korea_copyright == FREE
+recommended         = work.recommended_edition
+recommendedDownloadable = recommended != null && recommended.pdf_file_id != null && recommended.korea_copyright == FREE
+
+receivedDownloadable && received.id == recommended?.id  → AVAILABLE               (①)
+receivedDownloadable                                    → RECOMMENDATION_CHANGED  (②)
+그 밖                                                   → UNAVAILABLE             (③)
+    └ recommendedDownloadable  → redownloadUrl = 추천 판본, alternativeEdition = 추천 판본 (③-a)
+    └ 아니면                    → redownloadUrl = null, alternativeEdition = null        (③-b)
+```
+
+- **`RECOMMENDATION_CHANGED` 에는 "추천이 아예 없어진 곡" 도 든다.** 그때 받은 판본은 여전히 줄 수 있으니 버튼은 그대로이고, 화면의 한 줄(`지금 추천 판본은 이것과 달라요 — 곡 보기`)이 "지금 이 곡은 그 판본을 권하지 않는다" 는 사실을 말한다. 상태를 넷으로 쪼개지 않는 이유: 화면이 하는 일이 같다(버튼 + 한 줄 + 곡 보기).
+- **`receivedEdition` 이 무엇을 담나** — **판본이 살아 있으면 지금 값, 삭제됐으면 스냅샷**(01_ERD §3-12). 이 줄은 "누르면 무엇이 오는가" 를 말하는 줄이므로(화면정의 09 §1-2 D7), 파일이 교체돼 쪽수·크기가 달라졌으면 **지금 값**이 옳다. 스냅샷은 말할 수 없게 됐을 때의 폴백이고, 그래서 ③에서도 줄이 남는다(09 §6 S4). 스냅샷조차 비어 있으면 `null` → 화면이 줄을 생략한다.
+- **"이용 제한" 판본은 어떤 경로로도 주지 않는다**(기획 05 §3-3, 인수 조건 8-D 8): 판정이 `FREE` 가 아니면 `receivedDownloadable` 이 false 라 `redownloadUrl` 이 만들어지지 않고, 주소를 손으로 만들어 불러도 §3-4 가 403 이다. **게이트는 두 겹이되 판정 규칙은 한 곳(§3-4)이다.**
+- 정렬 **`last_downloaded_at DESC, id DESC`**. 숨김 곡 제외, 그 구분만. `counts.downloads` 는 이 응답 `items.totalElements` 와 항상 같다.
+- **페이지 범위 밖은 200 + 빈 `content`** — §10-2 와 한 글자도 다르지 않다(§0-4 공통 규칙). `page` 가 `2147483647` 이어도 200 이고, `counts`·`items.totalElements` 는 그대로 실제 수다. 검증 `MyLibraryPageBoundsIntegrationTest`.
+- **"다시 받기" 성공을 화면이 아는 수단(09 §6 S7)**: 곡 상세와 **같은 방식**이다 — `<a href download>` + 같은 주소로 `HEAD` 한 번(§3-4). 200 이면 화면이 그 줄의 날짜를 `오늘 받음` 으로 바꾸고, 실패면 그 항목 아래 안내를 띄운다(09 §1-2-1). **계약은 한 줄도 늘지 않는다**(전용 "다시 받기" 엔드포인트를 만들지 않는다 — 다운로드 문이 둘이 되면 저작권 게이트도 둘이 된다).
+- 계약 검증: `MyLibraryDownloadApiIntegrationTest`, `MyLibraryPage.downloads.test.jsx`.
+
+### 10-4. 화면 주소 · 로그인 "이유" 쿼리 — **확정** (화면정의 09 §6 S1·S2, 00 §8)
+
+| 항목 | 확정값 |
+|---|---|
+| 내 악보 | **`/{구분}/library`** → **즐겨찾기 탭으로 `replace` 리다이렉트**(히스토리에 남기지 않는다) |
+| 즐겨찾기 탭 | **`/{구분}/library/favorites`** (+ `?page=`) |
+| 받은 악보 탭 | **`/{구분}/library/downloads`** (+ `?page=`) |
+| 헤더 "내 악보" 링크 | **`/{현재 구분}/library/favorites`** (작곡가 메뉴와 같은 링크 규칙, 00 §8) |
+| 헤더 활성 판정 | 현재 경로가 **`/{구분}/library`** 로 시작하면 "내 악보" `.active`(두 탭 모두) |
+| 준비 중 구분 아래 | `/violin/library*` 는 **찾을 수 없는 페이지**(00 §2-4 공통 갈래) — 준비 중 구분에 하위 경로가 없다는 기존 규칙 그대로. 라우트를 따로 만들지 않으면 `*` 로 떨어져 저절로 그렇게 된다(인수 조건 8-F 5) |
+| 그 밖의 탭 이름 | `/piano/library/xyz` 도 찾을 수 없는 페이지(라우트를 두 개만 등록한다) |
+| 로그인 "이유" | 화면 전용 쿼리 **`reason`** — 값 **`favorite`** / **`library`**. 알 수 없는 값·없음은 **기존 부제**(오류 아님) |
+| 로그인 복귀 | 기존 **`redirect`** 그대로 — `/login?redirect=%2Fpiano%2Fworks%2F21&reason=favorite` |
+
+- **왜 `/library` 인가**: 주소 어휘는 소문자 영어 슬러그다(`search`·`works`·`composers`). `my` 는 무엇의 "내 것" 인지 말하지 않고, `favorites` 를 최상위로 올리면 받은 악보 탭이 그 아래에 설 자리가 없다. 헤더 아이콘도 이미 `library_music` 이다(00 §2-1).
+- **왜 `/library` 가 탭 주소를 겸하지 않고 리다이렉트하나**: 탭마다 자기 주소여야 "주소를 복사해 새 탭에 붙이면 같은 탭이 열리고, 탭을 바꾼 뒤 뒤로 가기를 누르면 이전 탭으로 돌아간다"(인수 조건 8-F 3)가 성립한다. 한 화면에 주소가 둘이면 **뒤로 가기 결과가 진입 경로마다 달라진다.** `replace` 라 히스토리에 흔적이 없다(옛 주소 리다이렉트와 같은 방식, §0-5).
+- **`reason` 이 대문자 enum 이 아닌 이유**: API 로 가지 않는 **화면 전용 쿼리**라 `from=violin` 과 같은 규칙을 따른다(§0-5). 서버는 이 값을 본 적이 없다.
+- **비로그인이 내 악보 주소로 들어오면**: 화면을 그리지 않고 `/login?redirect={들어오려던 탭 주소}&reason=library` 로 `replace`(관리 딥링크 가드와 같은 방식, `AdminRoute`). 로그인 후 **그 탭으로** 돌아온다(인수 조건 8-C 8).
+- **"이 곡을 즐겨찾기하려 했다" 를 들고 갔다 오는 수단**(기획 05 §11 ②, 09 §6 S2)은 **주소가 아니라 `sessionStorage` 한 칸**이다 — 카카오·구글 왕복에서 `redirect` 쿼리가 살아남지 못하기 때문이다(`OAuth2LoginSuccessHandler` 가 `/` 로 보낸다). 규칙 전체는 `03_기술결정.md` §22. **백엔드는 한 줄도 바뀌지 않는다.**
+
+### 10-5. 이번 계약에서 **하지 않은** 것
+
+- 곡 카드(`WorkSummaryDTO`)의 즐겨찾기 표시 — 기획 05 §10 8-6 이 1차 제외로 확정(인수 조건 8-G 5).
+- "N명이 즐겨찾기" 집계 — 8-G 6.
+- 받은 악보 삭제·즐겨찾기 폴더/메모/정렬 — 기획 05 §0-3 제외.
+- 즐겨찾기 개수 상한 — **두지 않는다**(기획 05 §10 8-5 의 senior-dev 몫을 여기서 닫는다. 근거는 01_ERD §3-11).
+- 최근 본 곡의 계정 동기화 — 기획 05 §0-3 제외. 저장은 브라우저뿐이다(03 §23).
+- 회원가입 경유 복귀·마이페이지 정비 — 기획 05 §10 8-4·8-8(사용자 작업 ④).

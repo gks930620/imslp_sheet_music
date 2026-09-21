@@ -18,6 +18,8 @@ import com.test.test.sheetmusic.edition.dto.AdminEditionDTO;
 import com.test.test.sheetmusic.edition.repository.DownloadLogRepository;
 import com.test.test.sheetmusic.edition.repository.EditionRepository;
 import com.test.test.sheetmusic.edition.repository.WorkEditionCount;
+import com.test.test.sheetmusic.member.repository.UserWorkDownloadRepository;
+import com.test.test.sheetmusic.member.repository.WorkFavoriteRepository;
 import com.test.test.sheetmusic.work.dto.AdminWorkDetailDTO;
 import com.test.test.sheetmusic.work.dto.AdminWorkListDTO;
 import com.test.test.sheetmusic.work.dto.AdminWorkSummaryDTO;
@@ -52,6 +54,8 @@ public class AdminWorkService {
     private final ComposerRepository composerRepository;
     private final EditionRepository editionRepository;
     private final DownloadLogRepository downloadLogRepository;
+    private final WorkFavoriteRepository workFavoriteRepository;
+    private final UserWorkDownloadRepository userWorkDownloadRepository;
     private final CrawlItemRepository crawlItemRepository;
     private final AdminEditionService adminEditionService;
     private final EditionDtoAssembler editionDtoAssembler;
@@ -188,12 +192,20 @@ public class AdminWorkService {
 
     // ===== §4-9 삭제 =====
 
+    /**
+     * 곡 삭제 (01_ERD §7) — 추천 해제 → 판본 → 다운로드 기록 → <b>즐겨찾기·받은 악보</b> → 수집 항목 → 곡.
+     *
+     * <p>즐겨찾기와 받은 악보는 숨김에는 남지만 <b>삭제에는 함께 사라진다</b>(2026-09-20) —
+     * 곡이 없으면 선반에 남길 것도 없기 때문이다(가리킬 곳 없는 줄은 화면에 그릴 수도 없다).
+     */
     @Transactional
     public void delete(Long id) {
         WorkEntity work = findOrThrow(id);
         List<EditionEntity> editions = editionRepository.findByWorkIdOrderByIdAsc(id);
         adminEditionService.removeEditions(work, editions);
         downloadLogRepository.deleteByWorkId(id);
+        workFavoriteRepository.deleteByWorkId(id);
+        userWorkDownloadRepository.deleteByWorkId(id);
         crawlItemRepository.detachWork(id);
         workRepository.delete(work);
     }

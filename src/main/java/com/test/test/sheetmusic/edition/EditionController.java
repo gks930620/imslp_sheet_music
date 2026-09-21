@@ -1,5 +1,7 @@
 package com.test.test.sheetmusic.edition;
 
+import com.test.test.jwt.model.CustomUserAccount;
+import com.test.test.sheetmusic.common.CurrentUser;
 import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
@@ -8,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,11 +39,13 @@ public class EditionController {
      * 그래서 한 핸들러 안에서 메서드로만 가른다.
      */
     @GetMapping("/{id}/download")
-    public ResponseEntity<Resource> download(@PathVariable Long id, HttpServletRequest request) {
+    public ResponseEntity<Resource> download(@PathVariable Long id, HttpServletRequest request,
+                                             @AuthenticationPrincipal CustomUserAccount account) {
         DownloadService.DownloadFile file = downloadService.prepare(id);
 
         if (!HttpMethod.HEAD.matches(request.getMethod())) {
-            downloadService.recordDownload(id);
+            // 주체가 있으면 "받은 악보" 에도 남는다(01_ERD §3-12). 비로그인이면 null — 집계에만 든다.
+            downloadService.recordDownload(id, CurrentUser.idOrNull(account));
         }
 
         String disposition = "attachment; filename=\"score-" + id + ".pdf\"; filename*=UTF-8''"

@@ -14,6 +14,7 @@ import com.test.test.sheetmusic.edition.dto.CopyrightDTOs;
 import com.test.test.sheetmusic.edition.dto.EditionSaveDTO;
 import com.test.test.sheetmusic.edition.repository.DownloadLogRepository;
 import com.test.test.sheetmusic.edition.repository.EditionRepository;
+import com.test.test.sheetmusic.member.repository.UserWorkDownloadRepository;
 import com.test.test.sheetmusic.work.WorkEntity;
 import com.test.test.sheetmusic.work.repository.WorkRepository;
 import java.time.Instant;
@@ -48,6 +49,7 @@ public class AdminEditionService {
     private final EditionRepository editionRepository;
     private final WorkRepository workRepository;
     private final DownloadLogRepository downloadLogRepository;
+    private final UserWorkDownloadRepository userWorkDownloadRepository;
     private final EditionFileService editionFileService;
     private final EditionDtoAssembler editionDtoAssembler;
     private final EditionFileFetcher editionFileFetcher;
@@ -214,6 +216,10 @@ public class AdminEditionService {
      * 같은 달의 같은 사건을 다르게 세고 이번 달 수치가 나중에 <b>줄어든다</b>. 사용자가 받은 것은 "곡" 이지
      * "판본 파일" 이 아니다. 다만 사라진 판본을 계속 가리키면 매달린 참조라 {@code edition_id} 는 NULL 로 비운다.
      * 곡을 지울 때는 {@code AdminWorkService} 가 {@code work_id} 로 로그를 함께 지운다(§4-9).
+     *
+     * <p><b>받은 악보도 같은 방식이다</b> (01_ERD §7 · §3-12, 2026-09-20): 줄은 남기고 {@code last_edition_id} 만
+     * NULL 로 비운다. <b>스냅샷 5개는 남긴다</b> — 그래야 "그때 받은 악보는 지금 받을 수 없어요" 아래에
+     * 무엇을 못 주는지 적을 수 있고, 사용자가 "지금 추천 판본 받기" 를 무엇의 대체인지 알고 누른다.
      */
     @Transactional
     public void removeEditions(WorkEntity work, List<EditionEntity> editions) {
@@ -227,6 +233,7 @@ public class AdminEditionService {
             workRepository.flush();
         }
         downloadLogRepository.detachEditions(editionIds);
+        userWorkDownloadRepository.detachEditions(editionIds);
 
         List<Long> fileIds = new ArrayList<>();
         for (EditionEntity edition : editions) {

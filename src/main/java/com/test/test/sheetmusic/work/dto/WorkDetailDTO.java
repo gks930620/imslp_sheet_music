@@ -64,4 +64,13 @@ public class WorkDetailDTO {
     /** 전체 판본 중 downloadable=true 수 — 목록과 무관하게 전체 기준이다 (02 §3-3). */
     private int downloadableOtherCount;
     private List<WorkSummaryDTO> sameComposerWorks;
+    /**
+     * 이 요청의 <b>로그인 주체</b>가 이 곡을 즐겨찾기했는가 (02 §3-3, 2026-09-20 신설).
+     * <b>비로그인이면 언제나 false</b> — 곡 상세는 공개 API 그대로이고 401 이 아니다.
+     *
+     * <p>따로 물으면 버튼이 꺼짐 → 켜짐으로 깜빡이므로 곡 상세가 함께 답한다(화면정의 09 §6 S5).
+     * 목록({@code WorkSummaryDTO})에는 <b>넣지 않는다</b> — 곡 카드에 즐겨찾기 표시를 두지 않기로 확정했고,
+     * 쓰는 곳 없는 필드를 먼저 두지 않는다(기획 05 §10 8-6).
+     */
+    private boolean favorited;
 }

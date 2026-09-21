@@ -13,6 +13,7 @@ import com.test.test.sheetmusic.edition.EditionDtoAssembler;
 import com.test.test.sheetmusic.edition.EditionEntity;
 import com.test.test.sheetmusic.edition.dto.EditionDTO;
 import com.test.test.sheetmusic.edition.repository.EditionRepository;
+import com.test.test.sheetmusic.member.repository.WorkFavoriteRepository;
 import com.test.test.sheetmusic.work.dto.ComposerRefDTO;
 import com.test.test.sheetmusic.work.dto.ComposerWorksResponseDTO;
 import com.test.test.sheetmusic.work.dto.WorkDetailDTO;
@@ -25,6 +26,7 @@ import com.test.test.sheetmusic.work.repository.WorkSortOrder;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -45,9 +47,13 @@ public class WorkQueryService {
     private static final int SAME_COMPOSER_LIMIT = 5;
     private static final int POPULAR_MAX_LIMIT = 20;
 
+    /** 최근 본 곡 상한 (02 §3-9) — 브라우저가 담는 개수와 같다(03 §23). */
+    private static final int RECENT_MAX = 10;
+
     private final WorkRepository workRepository;
     private final ComposerRepository composerRepository;
     private final EditionRepository editionRepository;
+    private final WorkFavoriteRepository workFavoriteRepository;
     private final WorkDtoAssembler workDtoAssembler;
     private final EditionDtoAssembler editionDtoAssembler;
 
@@ -124,9 +130,65 @@ public class WorkQueryService {
         return workDtoAssembler.toSummaries(workRepository.findPopular(Section.from(section), capped));
     }
 
+    // ===== §3-9 최근 본 곡 =====
+
+    /**
+     * 브라우저가 저장한 곡 id 목록의 <b>지금 요약</b> (02 §3-9). 로그인과 무관한 공개 API 다.
+     *
+     * <p>지켜야 할 것이 둘이다. <b>요청한 순서가 곧 응답 순서</b>(브라우저가 든 "최근에 본 순" 을 서버가 다시 정하지 않는다)이고,
+     * <b>내려간 곡은 조용히 빠진다</b>(없는 곡·숨김 곡·다른 구분 — 눌러서 404 를 만나지 않게). 그래서 응답이 요청보다 짧을 수 있다.
+     * 브라우저 저장은 오염될 수 있으므로 숫자가 아닌 토큰·빈 토큰·중복은 오류가 아니라 무시이고,
+     * 10개를 넘으면 앞 10개만 쓴다({@code limit}·{@code size} 상한과 같은 관용).
+     */
+    public List<WorkSummaryDTO> recent(String ids, String section) {
+        Section scope = Section.from(section);
+        List<Long> requested = parseRecentIds(ids);
+        if (requested.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, WorkEntity> found = new HashMap<>();
+        for (WorkEntity work : workRepository.findAllById(requested)) {
+            if (!work.isHidden() && work.getSection() == scope) {
+                found.put(work.getId(), work);
+            }
+        }
+        List<WorkEntity> ordered = new ArrayList<>();
+        for (Long id : requested) {
+            WorkEntity work = found.get(id);
+            if (work != null) {
+                ordered.add(work);
+            }
+        }
+        return workDtoAssembler.toSummaries(ordered);
+    }
+
+    /** 쉼표로 이은 id — 중복은 첫 번째만, 숫자가 아니면 버리고, 상한을 넘으면 앞에서 자른다. */
+    private List<Long> parseRecentIds(String ids) {
+        LinkedHashSet<Long> parsed = new LinkedHashSet<>();
+        if (ids == null) {
+            return List.of();
+        }
+        for (String token : ids.split(",")) {
+            String trimmed = token.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            try {
+                parsed.add(Long.parseLong(trimmed));
+            } catch (NumberFormatException ignored) {
+                // 브라우저 저장이 오염된 것뿐이다 — 화면 규칙이 "조용히 숨김" 이라 오류를 만들지 않는다.
+            }
+            if (parsed.size() >= RECENT_MAX) {
+                break;
+            }
+        }
+        return new ArrayList<>(parsed);
+    }
+
     // ===== §3-3 곡 상세 =====
 
-    public WorkDetailDTO detail(Long id) {
+    /** @param userId 이 요청의 로그인 주체(비로그인이면 null) — {@code favorited} 하나에만 쓴다(02 §3-3) */
+    public WorkDetailDTO detail(Long id, Long userId) {
         WorkEntity work = workRepository.findById(id)
                 .filter(w -> !w.isHidden())
                 .orElseThrow(() -> EntityNotFoundException.of("곡", id));
@@ -196,6 +258,8 @@ public class WorkQueryService {
                         ? null : editionDtoAssembler.toDto(imslpCandidate, files))
                 .downloadableOtherCount(downloadableOtherCount)
                 .sameComposerWorks(workDtoAssembler.toSummaries(sameComposer))
+                // 비로그인은 묻지 않는다 — 언제나 false 다(02 §3-3).
+                .favorited(userId != null && workFavoriteRepository.existsByUserIdAndWorkId(userId, work.getId()))
                 .build();
     }
 

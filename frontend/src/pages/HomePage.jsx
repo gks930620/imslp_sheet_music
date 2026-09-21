@@ -10,6 +10,7 @@ import { useDocumentTitle } from "../hooks/useDocumentTitle.js";
 import { callPublicApi } from "../lib/http.js";
 import { DEFAULT_SCOPE, SCOPE_EXAMPLES, buildSearchHref } from "../lib/searchScope.js";
 import { linkSection } from "../lib/sections.js";
+import { clearRecentWorks, readRecentWorkIds } from "../lib/recentWorks.js";
 
 /**
  * 01_홈.md — 검색창 하나가 주인공. 인기곡·작곡가는 독립 요청이라 각각 실패 처리한다.
@@ -36,6 +37,20 @@ export function HomePage() {
   // 기획 §11-3-6 — 인기곡은 순위표가 아니라 견본 진열대다. 보여줄 곡이 없으면 자리를 남기지 않는다
   // (불러오는 중·실패는 자리를 지킨다 — 비어 있는 것과 못 불러온 것은 다른 사실이다)
   const showPopular = Boolean(popular.loading || popular.error || popular.data?.length);
+
+  // 01_홈(2026-09-20) · 03 §23 — 저장된 곡이 **1개 이상일 때만** 영역이 생긴다.
+  // 없으면 요청도 보내지 않는다: 첫 방문·시크릿 창의 홈은 2026-09-10 시안과 한 글자도 다르지 않다(8-E 2·10).
+  // ⚠ 이 초기값은 **첫 마운트에서 한 번만** 읽는다 — 구분을 바꿔도 다시 읽지 않는다.
+  // 지금은 구분마다 라우트가 따로 있어(App.jsx — `section.slug` 별 Route) 전환 시 이 페이지가 remount 되므로 안전하다.
+  // 그 전제가 깨지면(한 Route 안에서 구분만 바뀌게 되면) 앞 구분의 최근 본 곡이 남는다 — 그때는 section.code 를 읽는 effect/key 로 바꾸어야 한다.
+  const [recentIds, setRecentIds] = useState(() => readRecentWorkIds(section.code));
+  const recentQuery = recentIds.join(",");
+  const recent = useApiResource(
+    () => callPublicApi(`/api/works/recent?ids=${recentQuery}&section=${section.code}`).then((r) => r.data ?? []),
+    { deps: [recentQuery, section.code], enabled: recentIds.length > 0 },
+  );
+  // 보여줄 것이 없으면(실패·전부 숨김) 영역째 사라진다 — 오류 상자·다시 시도 없음(8-E 11)
+  const showRecent = recentIds.length > 0 && !recent.error && (recent.loading || Boolean(recent.data?.length));
 
   return (
     <div className="home">
@@ -65,7 +80,42 @@ export function HomePage() {
         </div>
       </section>
 
-      <div className="home-sections">
+      {/* 01_홈 D11 — 최근 본 곡이 있으면 데스크톱에서 인기곡과 **같은 7fr 열**에 세로로 서고 작곡가 열은 제자리에 남는다 */}
+      <div className={showRecent ? "home-sections has-recent" : "home-sections"}>
+        {showRecent ? (
+          <section className="home-recent">
+            <div className="section-title-row">
+              <h2 className="section-title">최근 본 곡</h2>
+              {/* 확인 창·되돌리기 없음 — 공용 컴퓨터에서 한 번에 없애는 수단이다(기획 05 §4-2) */}
+              <button
+                className="btn btn-text"
+                type="button"
+                aria-label="최근 본 곡 지우기"
+                onClick={() => {
+                  clearRecentWorks(section.code);
+                  setRecentIds([]);
+                }}
+              >
+                지우기
+              </button>
+            </div>
+            {recent.data?.length ? (
+              <div className="post-list">
+                {recent.data.map((work) => (
+                  <WorkCard key={work.id} work={work} variant="compact" />
+                ))}
+              </div>
+            ) : (
+              // 저장된 곡 수만큼 먼저 자리를 잡는다 — 응답 후에 끼워 넣으면 인기곡이 한 화면 아래로 튄다
+              <div className="skeleton-list" aria-hidden="true">
+                {recentIds.map((id) => (
+                  <div key={id} className="skeleton-row" />
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
+
         {showPopular ? (
           <section className="home-popular">
             <h2 className="section-title">지금 바로 받을 수 있는 인기곡</h2>

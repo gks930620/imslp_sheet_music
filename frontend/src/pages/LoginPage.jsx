@@ -4,6 +4,16 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useDocumentTitle } from "../hooks/useDocumentTitle.js";
 import { getErrorMessage } from "../lib/format.js";
 
+/**
+ * 09 §3 — 로그인 화면의 "이유 한 줄" 2종. 기존 부제(`서비스에 로그인하세요`) 자리를 **대체**한다.
+ * 배너·InlineAlert 로 키우지 않는다(8-G 2 "권유는 로그인 화면 안의 한 줄뿐").
+ * 값은 화면 전용 쿼리 `reason`(02 §10-4). 알 수 없는 값·없음은 기존 부제 그대로 — 오류가 아니다.
+ */
+const LOGIN_REASONS = {
+  favorite: { icon: "star_border", text: "즐겨찾기는 로그인하면 쓸 수 있어요" },
+  library: { icon: "library_music", text: "내 악보는 로그인하면 볼 수 있어요" },
+};
+
 export function LoginPage() {
   useDocumentTitle("로그인 — 쉬운악보"); // 00 §4-1 — 구분 밖 화면이라 구분 이름이 붙지 않는다
   const { login, isAuthenticated } = useAuth();
@@ -23,6 +33,7 @@ export function LoginPage() {
 
   // 00_공통 §8: /login?redirect= 로 돌아갈 주소를 받는다 (관리 화면 딥링크 복귀)
   const target = searchParams.get("redirect") || location.state?.from || "/";
+  const reason = LOGIN_REASONS[searchParams.get("reason")] ?? null;
 
   // 로그인 성공(또는 이미 인증됨) 시 단일 지점에서 목적지로 이동.
   // 로그인 후 login()이 인증 상태를 갱신 → 이 effect가 이전 페이지(target)로 이동시킨다.
@@ -53,7 +64,16 @@ export function LoginPage() {
           <span className="material-icons">toys</span>
         </div>
         <h1 className="logo-title">로그인</h1>
-        <p className="logo-subtitle">서비스에 로그인하세요</p>
+        {reason ? (
+          <p className="logo-subtitle login-reason">
+            <span className="material-icons" aria-hidden="true">
+              {reason.icon}
+            </span>
+            {reason.text}
+          </p>
+        ) : (
+          <p className="logo-subtitle">서비스에 로그인하세요</p>
+        )}
       </div>
 
       <form onSubmit={onSubmit}>

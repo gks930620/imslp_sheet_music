@@ -17,6 +17,7 @@ import { SearchResultPage } from "./pages/sheetmusic/SearchResultPage.jsx";
 import { WorkDetailPage } from "./pages/sheetmusic/WorkDetailPage.jsx";
 import { ComposerListPage } from "./pages/sheetmusic/ComposerListPage.jsx";
 import { ComposerDetailPage } from "./pages/sheetmusic/ComposerDetailPage.jsx";
+import { MyLibraryPage } from "./pages/sheetmusic/MyLibraryPage.jsx";
 import { SectionPreparingPage } from "./pages/sheetmusic/SectionPreparingPage.jsx";
 import { AdminDashboardPage } from "./pages/admin/AdminDashboardPage.jsx";
 import { CrawlAdminPage } from "./pages/admin/CrawlAdminPage.jsx";
@@ -62,6 +63,13 @@ function App() {
               <Route path="works/:id" element={<WorkDetailPage />} />
               <Route path="composers" element={<ComposerListPage />} />
               <Route path="composers/:id" element={<ComposerDetailPage />} />
+              {/* 02 §10-4 — 내 악보는 탭마다 자기 주소다. `/{구분}/library` 는 즐겨찾기 탭으로 replace(히스토리에 남기지 않는다).
+                  탭 라우트는 **두 개뿐**이라 `/piano/library/xyz` 는 `*` 로 떨어져 찾을 수 없는 페이지가 된다(8-F 5). */}
+              <Route path="library">
+                <Route index element={<Navigate to="favorites" replace />} />
+                <Route path="favorites" element={<MyLibraryPage />} />
+                <Route path="downloads" element={<MyLibraryPage />} />
+              </Route>
             </Route>
           ) : (
             <Route key={section.slug} path={section.slug} element={<SectionPreparingPage />} />

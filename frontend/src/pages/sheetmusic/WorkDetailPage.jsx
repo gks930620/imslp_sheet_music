@@ -1,25 +1,33 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { WorkCard } from "../../components/sheetmusic/WorkCard.jsx";
 import { LevelChip } from "../../components/sheetmusic/LevelChip.jsx";
 import { CopyrightBadge } from "../../components/sheetmusic/CopyrightBadge.jsx";
 import { EditionRow } from "../../components/sheetmusic/EditionRow.jsx";
+import { FavoriteButton } from "../../components/sheetmusic/FavoriteButton.jsx";
 import { InlineAlert } from "../../components/common/InlineAlert.jsx";
 import { ErrorState } from "../../components/common/ErrorState.jsx";
 import { NotFoundView } from "../../components/common/NotFoundView.jsx";
 import { PreviewLightbox } from "../../components/common/PreviewLightbox.jsx";
+import { showToast } from "../../components/common/Toast.jsx";
 import { useApiResource } from "../../hooks/useApiResource.js";
 import { useSection, useSectionPath } from "../../hooks/useSection.js";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle.js";
-import { authFetch, callPublicApi } from "../../lib/http.js";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { authFetch, callApi, callPublicApi } from "../../lib/http.js";
 import { formatEditionKind, formatEditionScope, formatFileSizeCompact } from "../../lib/format.js";
 import { findSectionByCode, linkSection } from "../../lib/sections.js";
+import { LOGIN_REASON, loginHref, peekLoginIntent, saveLoginIntent, takeLoginIntent } from "../../lib/loginIntent.js";
+import { rememberRecentWork } from "../../lib/recentWorks.js";
 
 /**
  * 기획 §F3-6 · §5 예외표 — previewUrl 이 없는 이유가 "파일이 없다" 가 아니라 "판정이 안 끝났다" 일 때의 문구.
  * 판단 근거는 koreaCopyright 하나다(02 §2-3 — 이유를 알려주는 별도 필드는 두지 않는다).
  */
 const PREVIEW_HIDDEN_BY_COPYRIGHT = "저작권을 확인하는 중이라 미리보기도 아직 보여드릴 수 없어요";
+
+/** 03 §3-6-1 · 00 §3-11 ② — 켜기·끄기·복귀 완성이 모두 같은 실패 문구를 쓴다 */
+const FAVORITE_SAVE_FAILED = "즐겨찾기를 저장하지 못했어요. 다시 시도해 주세요";
 
 function editionInfoLine(edition) {
   return [
@@ -36,6 +44,8 @@ function editionInfoLine(edition) {
 export function WorkDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { status, isAuthenticated } = useAuth();
   const section = useSection();
   const sectionPath = useSectionPath();
   // 02 §0-7 — 곡 상세는 section 을 보내지 않는다. 곡이 스스로 구분을 안다
@@ -44,8 +54,85 @@ export function WorkDetailPage() {
   const [lightbox, setLightbox] = useState(null);
   const [downloadCheck, setDownloadCheck] = useState("idle"); // "idle" | "checking" | "failed"
   const othersRef = useRef(null);
+  // null = 서버가 준 값 그대로. 누르면(낙관) 그 값이 이긴다 — 02 §3-3 favorited 는 곡 상세 응답에 함께 온다(09 §6 S5).
+  // 어느 곡의 값인지 함께 들고 있는다: "같은 작곡가의 다른 곡" 으로 옮기면 화면은 그대로고 :id 만 바뀐다
+  const [favoriteOverride, setFavoriteOverride] = useState(null); // { id, value } | null
+  const favoriteBusy = useRef(false);
+  const intentConsumedFor = useRef(null);
 
   const work = detail.data;
+  const favorited = favoriteOverride?.id === id ? favoriteOverride.value : work?.favorited ?? false;
+  const returnTo = location.pathname + location.search;
+
+  /** 8-B 1·2 · 03 §3-6-2 — 비로그인·세션 풀림은 같은 길이다: 의도를 적어 두고 로그인 화면으로 */
+  const goLoginForFavorite = () => {
+    saveLoginIntent({ action: "FAVORITE", workId: Number(id), returnTo });
+    navigate(loginHref(returnTo, LOGIN_REASON.FAVORITE));
+  };
+
+  const saveFavorite = (next) =>
+    callApi(`/api/me/favorites/${id}`, { method: next ? "PUT" : "DELETE" });
+
+  const toggleFavorite = () => {
+    if (status === "loading") return; // 8-B 7 — 확인 중에는 로그인 화면으로 보내지 않는다
+    if (!isAuthenticated) {
+      goLoginForFavorite();
+      return;
+    }
+    if (favoriteBusy.current) return; // 응답 전 재클릭은 무시하되 비활성 모양으로 바꾸지 않는다(03 §3-6-1)
+
+    const next = !favorited;
+    favoriteBusy.current = true;
+    setFavoriteOverride({ id, value: next });
+    saveFavorite(next)
+      .catch((error) => {
+        if (error?.status === 401) {
+          goLoginForFavorite();
+          return;
+        }
+        setFavoriteOverride({ id, value: !next }); // 누르기 전 상태로 되돌린다. 화면 이동 없음(8-A 7)
+        showToast(FAVORITE_SAVE_FAILED);
+      })
+      .finally(() => {
+        favoriteBusy.current = false;
+      });
+  };
+
+  /**
+   * 03_기술결정 §22 — 로그인하고 돌아온 사람의 즐겨찾기를 **여기 한 곳에서** 완성한다.
+   * 소비는 take(읽는 즉시 지우고 그 다음 실행)라 새로고침에 두 번 실행되지 않는다(8-B 4).
+   * 비로그인으로 도착했으면(돌아가기·뒤로 가기) take 만 하고 아무것도 하지 않는다(8-B 6).
+   */
+  useEffect(() => {
+    if (intentConsumedFor.current === id || status === "loading" || !work) return;
+    const intent = peekLoginIntent();
+    if (!intent || intent.action !== "FAVORITE" || Number(intent.workId) !== Number(id)) return;
+
+    takeLoginIntent();
+    intentConsumedFor.current = id;
+    if (!isAuthenticated) return;
+
+    saveFavorite(true)
+      .then(() => {
+        setFavoriteOverride({ id, value: true });
+        showToast("즐겨찾기에 넣었어요");
+      })
+      .catch(() => {
+        setFavoriteOverride({ id, value: false });
+        showToast(FAVORITE_SAVE_FAILED);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, isAuthenticated, work, id]);
+
+  /**
+   * 03_기술결정 §23 — 곡 상세가 **정상으로 그려진 뒤에만** 이 브라우저의 최근 본 곡에 남긴다.
+   * 404·불러오기 실패는 남기지 않는다(8-E 9). 구분은 곡이 스스로 아는 값이다(02 §3-3 section).
+   */
+  const recentSectionCode = findSectionByCode(work?.section)?.code ?? linkSection(section).code;
+  useEffect(() => {
+    if (!work) return;
+    rememberRecentWork(recentSectionCode, work.id);
+  }, [work, recentSectionCode]);
 
   // 기획 04 §1-4 · 02 §7 — 응답 section 이 주소의 구분과 다르면 그 구분 주소로 replace(자기 교정).
   // 옛 주소 /works/:id 는 라우터가 먼저 /piano/… 로 보내므로 여기서는 늘 구분 안에 있다. 구분 밖에서 열렸거나
@@ -84,6 +171,8 @@ export function WorkDetailPage() {
       <div className="work-detail skeleton-detail" aria-hidden="true">
         <div className="skeleton-row" />
         <div className="skeleton-row" />
+        {/* 03 §3-6-1 — 즐겨찾기 버튼 자리(120×40)를 미리 잡는다. 응답 후 버튼이 끼어들며 아래가 밀리지 않게 */}
+        <div className="skeleton-row skeleton-favorite" />
         <div className="skeleton-card" />
       </div>
     );
@@ -151,6 +240,10 @@ export function WorkDetailPage() {
           ) : null}
           {catalog ? <span className="work-detail-catalog">{catalog}</span> : null}
           <LevelChip level={work.level} />
+          {/* 03 §3-6-1 — 모바일은 이 줄 바로 아래 자기 줄, 데스크톱은 이 줄의 오른쪽 끝(CSS). 비로그인에게도 보인다 */}
+          <span className="work-detail-favorite">
+            <FavoriteButton favorited={favorited} onToggle={toggleFavorite} />
+          </span>
         </p>
         {work.aliases?.length ? (
           <p className="work-detail-aliases">{`이렇게도 불러요: ${work.aliases.join(", ")}`}</p>
@@ -167,8 +260,9 @@ export function WorkDetailPage() {
         ) : null}
         {work.movementPageGuide && recommended ? (
           <p className="work-detail-guide">
+            {/* 2026-09-20 교체(03 §3-1) — 즐겨찾기 별이 생기자 책갈피가 "저장하는 것" 으로 읽힌다 */}
             <span className="material-icons" aria-hidden="true">
-              bookmark
+              menu_book
             </span>
             {`악장 안내: ${work.movementPageGuide} (추천 판본 기준)`}
           </p>
@@ -196,8 +290,9 @@ export function WorkDetailPage() {
         ) : (
           <>
             <p className="edition-card-label">
+              {/* 2026-09-20 교체(03 §3-6-4) — 별은 "내가 표시한 것", 엄지는 "남(운영자)이 권하는 것" */}
               <span className="material-icons" aria-hidden="true">
-                star
+                thumb_up
               </span>
               추천 판본
             </p>

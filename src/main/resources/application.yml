@@ -35,7 +35,7 @@ spring:
 
   h2:
     console:
-      enabled: true   # http://localhost:8080/h2-console (JDBC URL: 위 datasource.url 그대로)
+      enabled: true   # http://localhost:8104/h2-console (JDBC URL: 위 datasource.url 그대로)
                       # AUTO_SERVER 를 안 쓰므로 파일 DB 는 기동 중인 서버 JVM 안에서만 열린다 —
                       # 외부 DB 툴로 동시 접속하려면 서버를 먼저 끈다.
 
@@ -82,7 +82,10 @@ spring:
             client-id: ${KAKAO_CLIENT_ID}  # 카카오 REST API 키
             client-secret: ${KAKAO_CLIENT_SECRET:}  # 카카오 Client Secret (콘솔에서 사용 설정 시 .env에 채울 것, 미사용 앱은 빈 값 허용)
             client-authentication-method: client_secret_post  # 카카오는 POST 방식으로 Secret 전달
-            redirect-uri: http://localhost:8080/login/oauth2/code/kakao # 카카오 로그인 후 리디렉트될 주소
+            # 로컬 QA 는 프론트 개발서버(5104)로 들어오므로 카카오 콘솔에도 5104 주소를 등록한다.
+            # 카카오 → 5104 → vite 프록시(/login/oauth2) → 8104 → 성공 후 "/" 로 돌아오면 5104 홈이 된다.
+            # 8104 로 직접 볼 때는 APP_BASE_URL=http://localhost:8104 (콘솔에 그 주소도 등록해야 한다).
+            redirect-uri: ${APP_BASE_URL:http://localhost:5104}/login/oauth2/code/kakao
             authorization-grant-type: authorization_code  # OAuth2 인증 방식 (코드 방식)
             scope:
               - profile_nickname
@@ -92,7 +95,7 @@ spring:
           google: # ✅ 구글 OAuth2 추가
             client-id: ${GOOGLE_CLIENT_ID}
             client-secret: ${GOOGLE_CLIENT_SECRET}   #구글은 인가코드- access_token 과정에서 내부적으로 secret을 필요로 함.
-            redirect-uri: http://localhost:8080/login/oauth2/code/google
+            redirect-uri: ${APP_BASE_URL:http://localhost:5104}/login/oauth2/code/google  # 카카오와 같은 규칙
             scope:
               - profile       #카카오는 profile안의 여러정보 다 따로 지정해줘야하지만 구글은 profile만 지정하면 됨.
               - email
@@ -142,7 +145,7 @@ app:
   imslp:
     request-interval-ms: 2000
     file-wait-ms: 15000
-    user-agent: "SheetMusicKR/0.1 (+${APP_BASE_URL:http://localhost:8080}; contact: ${APP_CONTACT_EMAIL:gks9306202@gmail.com})"
+    user-agent: "SheetMusicKR/0.1 (+${APP_BASE_URL:http://localhost:5104}; contact: ${APP_CONTACT_EMAIL:gks9306202@gmail.com})"
 
   # Railway Storage Buckets(S3 호환) 설정 (§5-3).
   # endpoint 가 비어 있으면(로컬 개발) LocalFileStorage 로 폴백 → 코드 변경 없이 로컬/운영 동작.

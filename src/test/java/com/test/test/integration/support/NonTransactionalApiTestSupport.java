@@ -39,9 +39,14 @@ import org.springframework.transaction.annotation.Transactional;
 })
 public abstract class NonTransactionalApiTestSupport extends SheetMusicFixtureSupport {
 
-    /** 자식 → 부모 순으로 지운다(참조 무결성은 잠시 끈다 — H2). */
+    /**
+     * 자식 → 부모 순으로 지운다(참조 무결성은 잠시 끈다 — H2).
+     *
+     * <p>{@code work_favorite}·{@code user_work_download} 도 여기 있어야 한다(2026-09-21): 이 기반은 커밋을 하므로
+     * 곡만 비우고 이 둘을 남기면 <b>사라진 곡을 가리키는 줄</b>이 다음 테스트의 내 악보 목록에 섞인다.
+     */
     private static final List<String> SHEET_MUSIC_TABLES = List.of(
-            "crawl_item", "crawl_job", "download_log", "edition",
+            "crawl_item", "crawl_job", "download_log", "work_favorite", "user_work_download", "edition",
             "work_alias", "work_catalog_number", "work", "composer_alias", "composer");
 
     @Autowired

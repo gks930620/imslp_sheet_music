@@ -19,11 +19,14 @@ composer 1 ──< work 1 ──< work_alias
                   │  0..1 ─── edition (work.recommended_edition_id)   ← 곡당 추천 판본 1개
                   └──< download_log
 crawl_job 1 ──< crawl_item >── 0..1 work
+users (기존) 1 ──< work_favorite      >── work          ← 즐겨찾기 (2026-09-20, §3-11)
+users (기존) 1 ──< user_work_download >── work          ← 받은 악보 (곡 단위 한 줄, §3-12)
+                              └──────── 0..1 edition (last_edition_id)
 users (기존)  — user_roles 에 'ADMIN' 역할 추가(시드)
 files (기존)  — ref_type 에 EDITION 추가, file_usage 는 ATTACHMENT(PDF)/THUMBNAIL(미리보기) 재사용
 ```
 
-- 신규 테이블 9개: `composer`, `composer_alias`, `work`, `work_alias`, `work_catalog_number`, `edition`, `download_log`, `crawl_job`, `crawl_item`
+- 신규 테이블 11개: `composer`, `composer_alias`, `work`, `work_alias`, `work_catalog_number`, `edition`, `download_log`, `crawl_job`, `crawl_item`, **`work_favorite`**, **`user_work_download`**
 - 기존 테이블 변경 2개: `files`(enum 값 추가만, 컬럼 변경 없음), `user_roles`(시드에 ADMIN 1건)
 - 커뮤니티·채팅 테이블은 손대지 않는다(01 §9 8-2).
 
@@ -41,7 +44,7 @@ files (기존)  — ref_type 에 EDITION 추가, file_usage 는 ATTACHMENT(PDF)/
 | 예약어 회피 | `value`(H2 예약어) → `catalog_value`, `key` → `musical_key`, `mode` → `item_mode`, `usage` → 기존과 같이 `file_usage` |
 | 인덱스 이름 | `idx_{테이블}_{컬럼}`, 유니크 `uk_{테이블}_{컬럼}` (`@Table(indexes=…, uniqueConstraints=…)`) |
 | 정규화 컬럼 | 검색 대상 문자열마다 `*_normalized` 짝 컬럼을 둔다(§2). 엔티티가 원문을 바꿀 때 항상 함께 갱신(엔티티 도메인 메서드 안에서 `SearchNormalizer` 호출) |
-| 생성/수정 시각 | `created_at`, `updated_at` — `@PrePersist/@PreUpdate` (기존 패턴) |
+| 생성/수정 시각 | `created_at`, `updated_at` — `@PrePersist/@PreUpdate` (기존 패턴). **예외 하나: `user_work_download.created_at`** — 넣기가 네이티브 문장(03 §26)이라 `@PrePersist` 가 돌지 않는다. 그래서 그 표만 **엔티티 생성자**가 채운다(03 §26-4) |
 
 ---
 
@@ -291,6 +294,48 @@ IMSLP 의 `div.we` 블록 하나에 파일이 여러 개면 파일마다 행을 
 
 인덱스: `idx_crawl_item_job_status(job_id, status)`.
 
+### 3-11. `work_favorite` — 즐겨찾기 (2026-09-20 신설, 기획 05 §1)
+
+| 컬럼 | 타입 | NULL | 설명 |
+|---|---|---|---|
+| id | BIGINT PK | N | |
+| user_id | BIGINT FK→users | N | 계정. **토큰 주체로만 채운다** — 클라이언트가 준 userId 를 쓰지 않는다(컨벤션 §4-1) |
+| work_id | BIGINT FK→work | N | **곡 단위**(판본 아님 — 기획 05 §1-4). 준비 중·이용 제한·확인 중 곡도 들어온다 |
+| created_at | TIMESTAMP(6) | N | **정렬 키** — 즐겨찾기 탭은 "최근에 넣은 순"(02 §10-2) |
+
+인덱스: `uk_work_favorite(user_id, work_id)`, `idx_work_favorite_user_created(user_id, created_at)`, `idx_work_favorite_work(work_id)`(곡 삭제 시 정리).
+
+- **유니크가 곧 멱등의 근거다.** 켜기는 `PUT`(02 §10-1)이고 이미 있으면 **아무것도 하지 않는다 — `created_at` 을 갱신하지 않는다.** 두 번 눌러 순서가 바뀌면 "최근에 넣은 순"이 거짓말이 되고, 로그인 복귀 완성(03 §22)이 두 번 실행돼도 목록이 흔들리지 않아야 한다.
+- **개수 상한은 두지 않는다**(기획 05 §10 8-5 — senior-dev 몫). 1인 수백 행이어도 `uk_work_favorite` 인덱스 하나로 조회가 끝나고, 상한을 두면 "가득 찼어요" 문구·해제 유도 화면이 1차 범위에 새로 생긴다. 남용이 실제로 보이면 그때 연다.
+- 숨김 곡은 **행을 지우지 않는다** — 목록·숫자에서만 빠진다(기획 05 §1-4 "즐겨찾기가 지워진 게 아니라 곡이 잠시 안 보이는 것"). 곡이 **삭제**되면 함께 사라진다(§7).
+
+### 3-12. `user_work_download` — 받은 악보 (2026-09-20 신설, 기획 05 §3)
+
+**"곡 단위 한 줄"(기획 05 §3-2)이 그대로 테이블이다.** `download_log` 는 **집계 원장 그대로 두고**(비로그인 기록 포함, 손대지 않는다), "누가 무엇을 받았나"는 이 표가 따로 든다. 근거는 `03_기술결정.md` §24.
+
+| 컬럼 | 타입 | NULL | 설명 |
+|---|---|---|---|
+| id | BIGINT PK | N | |
+| user_id | BIGINT FK→users | N | 토큰 주체. **비로그인 다운로드는 이 표에 행을 만들지 않는다**(기획 05 §3-1) |
+| work_id | BIGINT FK→work | N | |
+| last_downloaded_at | TIMESTAMP(6) | N | **정렬 키이자 화면의 "9월 12일 받음"**. 같은 곡을 다시 받으면 갱신된다(행은 늘지 않는다) |
+| last_edition_id | BIGINT FK→edition | **Y** | 가장 최근에 받은 판본. **판본이 지워지면 NULL**(`download_log.edition_id` 와 같은 규칙, §7) |
+| edition_kind | VARCHAR(30) | Y | **스냅샷** — 받은 순간의 판본 설명. enum `EditionKind`. **`@JdbcTypeCode(SqlTypes.VARCHAR)` 필수**(§9-1) |
+| edition_scope | VARCHAR(30) | Y | 스냅샷. enum `EditionScope`. 〃 |
+| edition_movement_number | INT | Y | 스냅샷 |
+| edition_page_count | INT | Y | 스냅샷 |
+| edition_file_size | BIGINT | Y | 스냅샷 |
+| created_at | TIMESTAMP(6) | N | 그 사람이 이 곡을 **처음** 받은 시각(표시에는 쓰지 않는다). 값은 **그 다운로드 시각**이고 다시 받아도 갱신되지 않는다 — 규칙은 엔티티 생성자 한 곳에만 있다(03 §26-4) |
+
+인덱스: `uk_user_work_download(user_id, work_id)`, `idx_user_work_download_user_time(user_id, last_downloaded_at)`, `idx_user_work_download_work(work_id)`.
+
+- **왜 판본 설명을 스냅샷하나.** 화면은 "다시 받기"를 누르기 전에 **무엇을 받는지**를 보여야 하고(화면정의 09 §1-2 "받은 판본: 전체 악보 · 전곡 · 5쪽 · 1.1MB"), 판본이 **삭제된 뒤에도** 그 줄을 남기라고 요구한다(09 §6 S4). `last_edition_id` 가 NULL 이 되면 "그때 받은 판본을 못 준다"는 **판정**은 가능하지만 **무엇을 못 주는지**는 말할 수 없다. 그러면 사용자는 "지금 추천 판본 받기"가 무엇의 대체인지 모른 채 누르게 된다.
+- **스냅샷은 5개뿐이다** — 화면이 그 줄을 만드는 데 쓰는 값만. 출판사·편집자·저작권 표기는 스냅샷하지 않는다(그 줄에 없고, 남기면 "지금 판본"과 어긋난 옛 값을 우리가 보관하게 된다).
+- 갱신 시점: 다운로드 성공 1건마다 **upsert** — `last_downloaded_at`·`last_edition_id`·스냅샷 5개를 **그 다운로드의 값으로 덮는다**(기획 05 §3-2 "마지막 판본" 기준). `HEAD` 는 아무것도 쓰지 않는다(02 §3-4 그대로).
+- ⚠️ **2026-09-21 — 이 표의 upsert 는 네이티브 한 문장이다**(`INSERT … ON DUPLICATE KEY UPDATE`, 03 §26). "있나 보고 없으면 넣기" 가 같은 계정의 동시 다운로드에서 `uk_user_work_download` 를 위반해 **다운로드 응답을 500 으로 만들고 집계까지 롤백시켰기 때문**이다(qa 8차 결함 1). **여기 컬럼을 더하거나 이름을 바꾸면 그 SQL 도 같이 고쳐야 한다** — 네이티브 문장이라 컴파일 타임에 걸리지 않는다(§9 드리프트 규칙의 같은 갈래).
+- **과거 기록은 소급하지 않는다** — 이 표는 기능이 들어온 뒤부터 쌓인다(기획 05 §3-1, 인수 조건 8-D 4). 그래서 마이그레이션에 백필이 없다.
+- 숨김 곡은 목록·숫자에서만 빠지고 행은 남는다. 곡이 삭제되면 함께 사라진다(§7).
+
 ---
 
 ## 4. 상태값(enum) 총정리
@@ -438,11 +483,11 @@ else                                                        → UNKNOWN
 | 동작 | 순서 |
 |---|---|
 | 작곡가 삭제 | 곡 1개라도 있으면 거부(400). 없으면 별칭 → 작곡가 |
-| 곡 삭제 | `recommended_edition_id = NULL` → 판본마다(§아래 판본 삭제) → download_log(work) → 별칭·작품번호(cascade) → crawl_item.work_id NULL 처리 → 곡 |
-| 판본 삭제 | 추천이면 곡의 `recommended_edition_id = NULL` → **download_log(edition) 의 `edition_id` 를 NULL 로**(행은 남긴다 — §3-7) → `files` 행(pdf, preview) 삭제 + 바이트 삭제는 **커밋 후**(기존 `FileService.registerBytesDeletionAfterCommit` 패턴) → 판본 |
+| 곡 삭제 | `recommended_edition_id = NULL` → 판본마다(§아래 판본 삭제) → download_log(work) → **work_favorite(work) · user_work_download(work) 삭제**(2026-09-20 — 곡이 없으면 선반에 남길 것도 없다) → 별칭·작품번호(cascade) → crawl_item.work_id NULL 처리 → 곡 |
+| 판본 삭제 | 추천이면 곡의 `recommended_edition_id = NULL` → **download_log(edition) 의 `edition_id` 를 NULL 로**(행은 남긴다 — §3-7) → **user_work_download(edition) 의 `last_edition_id` 를 NULL 로**(스냅샷 5개는 남긴다 — §3-12, 그래야 "그때 받은 악보는 지금 받을 수 없어요" 아래에 무엇을 못 주는지 적을 수 있다) → `files` 행(pdf, preview) 삭제 + 바이트 삭제는 **커밋 후**(기존 `FileService.registerBytesDeletionAfterCommit` 패턴) → 판본 |
 | 파일 교체 | 새 files 행 연결 후 옛 files 행 삭제(바이트는 커밋 후) |
 | 추천 지정 | 대상 판본이 그 곡의 것이고 `pdf_file_id IS NOT NULL` 일 때만. 이전 추천은 자동 해제(컬럼 하나라 자연히) |
-| 다운로드 | 파일 Resource 확보 성공 후 짧은 트랜잭션에서 `edition.download_count+1`, `work.download_count+1`, `download_log` INSERT(원자적 UPDATE 문). 실패(파일 없음)면 아무것도 올리지 않는다 |
+| 다운로드 | 파일 Resource 확보 성공 후 짧은 트랜잭션에서 `edition.download_count+1`, `work.download_count+1`, `download_log` INSERT(원자적 UPDATE 문). 실패(파일 없음)면 아무것도 올리지 않는다. **2026-09-20 — 그 요청에 로그인 주체가 있으면 같은 트랜잭션에서 `user_work_download` 를 upsert 한다**(§3-12). 비로그인이면 여기까지가 전부다(집계만, 기획 05 §3-1). `HEAD` 는 이 트랜잭션 자체를 열지 않는다(02 §3-4) |
 | 수집 upsert | `imslp_url` 로 곡 조회 → 없으면 생성(CREATE), 있으면 판본만 붙임(ATTACH/REFRESH). 판본은 `imslp_file_id` 로 조회 → 있으면 메타만 갱신(파일·판정·메모는 보존), 없으면 생성. **갱신 범위·라이선스 강등 회수는 02 §6-12** |
 | 수집 판본 조회 | `imslp_file_id` 는 전역 UNIQUE 라 조회도 전역이다. 찾은 판본의 `work_id` 가 **지금 수집 중인 곡이 아니면** 그 판본은 건드리지 않고 건너뛴다(경고 로그) — 다른 곡의 판본을 조용히 갱신하거나 곡 사이를 옮겨 다니면 판본 수 집계와 추천이 어긋난다 (2026-09-07 추가) |
 | 파일 받아오기 결과 붙이기 | 대상 판본이 **그 사이에 파일을 갖게 되었으면 붙이지 않는다** — 받아온 `files` 행을 삭제하고 `file_fetch_status` 만 비운다. 덮어쓰면 밀려난 행이 `ref_id ≠ 0` 이라 orphan 배치가 못 지운다 (02 §5-7, 2026-09-07 추가) |
@@ -477,6 +522,9 @@ else                                                        → UNKNOWN
 새 DB(테스트 `create-drop`, 초기화 후 로컬, 첫 배포 MySQL)는 엔티티대로 생성되므로 실행할 필요가 없다.
 **추가형 변경(nullable 컬럼·새 테이블·인덱스)은 이 표에 적지 않는다** — `update` 가 알아서 한다.
 이번 함께 들어가는 `work.collection_guide`(§3-3)가 그 예다.
+
+**2026-09-20 — 즐겨찾기·받은 악보(§3-11·§3-12)도 표에 넣지 않는다.** 둘 다 **새 테이블**이고 컬럼 변경이 하나도 없어 `ddl-auto: update` 가 그대로 만든다(순수 추가형). 백필도 없다 — 과거 다운로드 기록은 누구의 것도 아니기 때문이다(기획 05 §3-1, 인수 조건 8-D 4). **`download_log` 는 한 글자도 바뀌지 않는다**(그래서 이번 변경으로 인기곡 정렬·대시보드 `monthlyDownloads` 가 흔들릴 여지가 없다 — 회귀 가드 `MyLibraryDownloadApiIntegrationTest`).
+다만 **`user_work_download.edition_kind`·`edition_scope` 에 `@JdbcTypeCode(SqlTypes.VARCHAR)` 를 빠뜨리면 §9-1 로 없앤 네이티브 `ENUM` 컬럼이 두 개 되살아난다** — 그러면 다음에 `EditionKind` 에 상수를 하나 더할 때 **서버가 기동하지 못한다**(위 표 2번째 줄과 같은 사고). 회귀 가드는 이미 있다: `SchemaEnumColumnTypeIntegrationTest`(생성 스키마에 `DATA_TYPE = 'ENUM'` 인 컬럼이 0개).
 
 `work.recommended_edition_reviewed`(§3-3, 2026-09-08)도 **표에 넣지 않는다**(senior-dev 판단). `NOT NULL` 컬럼이라
 "기존 행은 어쩌나" 가 걸릴 수 있지만, Hibernate `update` 가 `DEFAULT FALSE` 를 붙여 만들고 **실데이터 복사본으로 기동을

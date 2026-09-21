@@ -3705,3 +3705,288 @@ a {
     min-width: 200px;
   }
 }
+
+/* =====================================================================
+   즐겨찾기 · 내 악보 · 최근 본 곡 (2026-09-20 — 화면정의 09, 03 §3-6, 01_홈)
+   designer 가 새 토큰 없이 설계했다(09 §5) — 전부 기존 토큰이다.
+   ===================================================================== */
+
+/* --- 즐겨찾기 버튼 (00 §3-17) ---------------------------------------- */
+.favorite-btn {
+  min-height: var(--touch-target);
+  font-size: var(--font-size-md);
+  gap: var(--space-1);
+}
+
+.favorite-btn .material-icons {
+  font-size: var(--icon-size-md);
+}
+
+/* 켜짐: 색만이 아니라 글자·아이콘 채움이 함께 바뀐다. 노란 별 금지 — 이 서비스의 노랑은 "저작권 확인 중" 이다 */
+.favorite-btn-on {
+  background-color: var(--color-primary-light);
+}
+
+/* 03 §3-6-1 — 모바일은 작곡가·작품번호·난이도 줄 **바로 아래 자기 줄**, 왼쪽 정렬(버튼 폭은 auto) */
+.work-detail-favorite {
+  flex: 0 0 100%;
+  order: 99;
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.skeleton-favorite {
+  width: 120px;
+  height: 40px;
+}
+
+/* --- 본문 탭 (00 §3-18) ---------------------------------------------- */
+.page-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.page-tab {
+  flex: 1 1 0; /* 모바일: 폭 N등분 */
+  min-height: var(--touch-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+}
+
+.page-tab:hover {
+  background-color: var(--color-surface-muted);
+  border-bottom-color: var(--color-border-strong);
+}
+
+.page-tab.selected {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+  border-bottom-color: var(--color-primary);
+}
+
+.page-tab.selected:hover {
+  border-bottom-color: var(--color-primary);
+}
+
+/* --- 내 악보 (09 §1) -------------------------------------------------- */
+.my-library-title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.my-library-checking {
+  padding: var(--space-16) 0;
+}
+
+/* 한 항목 = [곡 카드 링크] + [링크 밖 동작 영역] (09 §1-4 (b) — 오터치를 막는 것은 문구가 아니라 경계다) */
+.library-item {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.library-item:last-child {
+  border-bottom: none;
+}
+
+.library-item .work-card {
+  flex: 1 1 auto;
+  border-bottom: none;
+  min-width: 0;
+}
+
+.library-remove {
+  flex: 0 0 var(--touch-target);
+  border-left: 1px solid var(--color-border); /* 어디까지가 링크인지 눈으로 보인다 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.library-remove-btn {
+  width: var(--touch-target);
+  height: var(--touch-target);
+  border: none;
+  background: none;
+  border-radius: var(--radius-full);
+  color: var(--color-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.library-remove-btn:hover {
+  background-color: var(--color-surface-muted);
+}
+
+.library-remove-btn .material-icons {
+  font-size: var(--icon-size-lg);
+}
+
+/* 받은 악보 항목 — 모바일: 카드 아래 세로 쌓기 (09 §1-2-1) */
+.library-item-received {
+  flex-direction: column;
+}
+
+.library-receive {
+  border-top: 1px dashed var(--color-border);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.library-receive-date {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.library-receive-edition {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.library-receive-label {
+  color: var(--color-text-muted);
+}
+
+.library-receive-blocked,
+.library-receive-note {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.library-receive-blocked .material-icons {
+  font-size: var(--icon-size-sm);
+  color: var(--color-text-muted);
+  vertical-align: middle;
+  margin-right: var(--space-1);
+}
+
+.library-receive-note .material-icons {
+  font-size: var(--icon-size-sm);
+  color: var(--color-info);
+  vertical-align: middle;
+  margin-right: var(--space-1);
+}
+
+.library-receive-note .btn-text {
+  font-size: var(--font-size-sm);
+  padding: 0 var(--space-1);
+}
+
+.library-receive-btn {
+  width: 100%;
+  justify-content: center;
+  min-height: var(--touch-target);
+}
+
+.library-empty-icon {
+  font-size: var(--icon-size-sm);
+  vertical-align: middle;
+}
+
+.library-empty-strong {
+  font-weight: var(--font-weight-medium);
+}
+
+/* --- 홈 "최근 본 곡" (01_홈 2026-09-20) ------------------------------- */
+.home-recent .section-title-row {
+  margin-bottom: var(--space-3);
+}
+
+/* 저장된 곡이 없으면 이 규칙들은 아예 걸리지 않는다 — 첫 방문 홈은 2026-09-10 시안 그대로다(8-E 2, 8-G 4) */
+@media (min-width: 1024px) {
+  .home-sections.has-recent .home-recent {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .home-sections.has-recent .home-popular {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .home-sections.has-recent .home-composers {
+    grid-column: 2;
+    grid-row: 1 / span 2; /* 작곡가 열은 두 블록 옆에 걸쳐 선다 — 아래로 밀리지 않는다 */
+  }
+}
+
+/* --- Toast 되돌리기 변형 (00 §3-11) ---------------------------------- */
+.toast-with-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-right: var(--space-2);
+}
+
+.toast-action {
+  background: none;
+  border: none;
+  color: var(--color-primary-light); /* 어두운 바탕 위 — primary 는 대비가 모자란다 */
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.toast-action:hover {
+  background-color: var(--color-header-item-hover);
+}
+
+/* --- 로그인 "이유 한 줄" (09 §3) -------------------------------------- */
+.login-reason .material-icons {
+  font-size: var(--icon-size-sm);
+  color: var(--color-primary);
+  vertical-align: middle;
+  margin-right: var(--space-1);
+}
+
+@media (min-width: 768px) {
+  /* 03 §3-6-1 — 데스크톱은 같은 줄의 오른쪽 끝(세로 가운데) */
+  .work-detail-favorite {
+    flex: 0 0 auto;
+    margin-left: auto;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+}
+
+@media (min-width: 1024px) {
+  .my-library-title {
+    font-size: var(--font-size-3xl);
+  }
+
+  .page-tab {
+    flex: 0 0 auto; /* 데스크톱: auto 폭으로 왼쪽부터 나열 */
+    padding: 0 var(--space-4);
+  }
+
+  /* 받은 악보 항목 — 데스크톱은 오른쪽 280px 받기 열 (09 §1-2-1) */
+  .library-item-received {
+    flex-direction: row;
+  }
+
+  .library-item-received .library-receive {
+    flex: 0 0 280px;
+    border-top: none;
+    border-left: 1px solid var(--color-border);
+  }
+
+  .library-receive-btn {
+    width: auto;
+    min-width: 160px;
+  }
+}

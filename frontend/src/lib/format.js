@@ -191,6 +191,53 @@ export function formatCount(value) {
   return Number(value ?? 0).toLocaleString("en-US");
 }
 
+function startOfLocalDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+/**
+ * 받은 악보의 날짜 한 줄 (00_공통 §4 · 화면정의 09 §1-2-1).
+ * `오늘 받음` / `어제 받음` / `9월 12일 받음` / `2025년 9월 12일 받음`.
+ *
+ * 시·분은 쓰지 않는다 — 선반이지 영수증이 아니다(기획 05 §3-2). 갈리는 기준은 **사용자 지역 시각의 달력 날짜**다.
+ * `now` 를 인자로 받는 이유: 시간에 기대는 로직을 결정적으로 시험하기 위해서다(컨벤션 §6).
+ *
+ * @param {string|null} value 서버가 주는 ISO UTC 문자열
+ * @param {Date} [now] 지금. 값이 없거나 이상하면 빈 문자열 — 화면은 줄을 만들지 않는다
+ */
+export function formatReceivedDate(value, now = new Date()) {
+  const date = toDate(value);
+  if (!date) return "";
+
+  const days = Math.round((startOfLocalDay(now) - startOfLocalDay(date)) / 86400000);
+  if (days === 0) return "오늘 받음";
+  if (days === 1) return "어제 받음";
+
+  const month = date.getMonth() + 1;
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return sameYear
+    ? `${month}월 ${date.getDate()}일 받음`
+    : `${date.getFullYear()}년 ${month}월 ${date.getDate()}일 받음`;
+}
+
+/**
+ * 판본 한 줄 설명 (02 §2-4 EditionBriefDTO · 화면정의 09 §1-2 D7).
+ * `전체 악보 · 전곡 · 5쪽 · 1.1MB` — **있는 것만** ` · ` 로. 서버는 문장을 만들지 않는다(§2-2-1 과 같은 원칙).
+ */
+export function formatEditionBrief(brief) {
+  if (!brief) return "";
+  // 02 §2-4 — 스냅샷에는 `sectionLabel` 이 없다. 악장 번호를 모르는 발췌는 `발췌` 로 폴백한다(§3-4 접미사 규칙과 같은 말)
+  const scope = formatEditionScope(brief) || (brief.scope === "MOVEMENT" ? "발췌" : "");
+  return [
+    formatEditionKind(brief.kind),
+    scope,
+    brief.pageCount ? `${brief.pageCount}쪽` : "",
+    formatFileSizeCompact(brief.fileSize),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 /* ---------------------------------------------------------------------
    받게 되는 악보의 범위 한 줄 (02 §2-2-1 scopeNote, 기획 §2 F2-5 · §11-2)
    별칭 일치 줄과 같은 자리·같은 한 줄이라 여기서 함께 만든다.
