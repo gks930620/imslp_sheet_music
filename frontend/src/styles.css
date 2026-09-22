@@ -3400,6 +3400,230 @@ a {
   color: var(--color-danger);
 }
 
+/* --- A-1 "이 판본을 고른 이유" (06-A, 02 §4-7-2) ----------------------- */
+.recommendation-reason-box {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.recommendation-reason-box-history-only {
+  border-left-color: var(--color-border-strong);
+  padding: var(--space-3) var(--space-4);
+}
+
+.recommendation-reason-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  margin-bottom: var(--space-2);
+}
+
+.recommendation-reason-who {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-body);
+}
+
+.recommendation-reason-rule,
+.recommendation-reason-evidence,
+.recommendation-reason-label,
+.recommendation-reason-note,
+.recommendation-reason-previous,
+.recommendation-reason-empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-1);
+}
+
+.recommendation-reason-error {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  display: inline-block;
+  margin-right: var(--space-2);
+}
+
+.recommendation-review-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.recommendation-review-pending {
+  color: var(--color-warning);
+  font-size: var(--font-size-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.recommendation-review-done {
+  color: var(--color-success);
+  font-size: var(--font-size-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.recommendation-reason-hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-2);
+}
+
+.recommendation-history {
+  margin-top: var(--space-3);
+}
+
+.recommendation-history-toggle {
+  font-size: var(--font-size-sm);
+}
+
+.recommendation-history-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.recommendation-history-row {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.recommendation-history-pill {
+  display: inline-block;
+  background-color: var(--badge-admin-recommended-bg);
+  color: var(--badge-admin-recommended-text);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-2);
+  margin-right: var(--space-2);
+}
+
+.recommendation-history-meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.recommendation-history-editions {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-body);
+}
+
+.recommendation-history-reason,
+.recommendation-history-note {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+/* --- A-3 "이 판본으로 바꾸기" 패널 (06-A, 02 §5-6·§5-6-2) --------------- */
+.recommend-change-panel {
+  background-color: var(--color-surface-muted);
+  border: 1px solid var(--color-primary);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.recommend-change-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-3);
+}
+
+.recommend-change-current {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.recommend-change-current-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.recommend-change-current-value {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-body);
+}
+
+.recommend-change-current-reason {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.recommend-warning-title {
+  font-weight: var(--font-weight-medium);
+}
+
+.recommend-warning-group {
+  margin-top: var(--space-2);
+}
+
+.recommend-warning-group-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.recommend-warning-group ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+}
+
+.recommend-warning-primary {
+  font-weight: var(--font-weight-medium);
+}
+
+.recommend-warning-help {
+  font-size: var(--font-size-xs);
+}
+
+.recommend-reason-group {
+  margin-top: var(--space-3);
+}
+
+.recommend-reason-item {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  width: 100%;
+  margin: var(--space-1) 0;
+}
+
+.recommend-reason-label {
+  font-size: var(--font-size-md);
+}
+
+.recommend-note-counter {
+  display: block;
+  text-align: right;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.recommend-change-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.recommend-confirm-checkbox {
+  width: 100%;
+}
+
+.recommend-change-actions {
+  justify-content: flex-end;
+}
+
 /* --- 저작권 판정 대기함 (06-C) ---------------------------------------- */
 /* --- 자동 판정 (06-C 상단, 02 §5-11·5-12) ----------------------------- */
 .auto-judge {

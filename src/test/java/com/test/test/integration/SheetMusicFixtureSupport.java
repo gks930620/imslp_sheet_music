@@ -1,11 +1,13 @@
 package com.test.test.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.test.test.sheetmusic.seed.SeedCsvReader;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -30,6 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public abstract class SheetMusicFixtureSupport extends ApiIntegrationTestSupport {
 
     protected static final String SAMPLE_PDF_CLASSPATH = "/imslp/sample.pdf";
+    private static final String COMPOSERS_CSV = "seed/composers.csv";
+    private static final String WORKS_CSV = "seed/works.csv";
 
     /** 02 §5-1 업로드 응답. */
     protected record UploadedPdf(long fileId, Long previewFileId, long fileSize, Integer pageCount, String previewUrl) {
@@ -37,6 +41,45 @@ public abstract class SheetMusicFixtureSupport extends ApiIntegrationTestSupport
 
     /** 추천 판본까지 갖춘 곡. */
     protected record ReadyWork(long workId, long editionId, UploadedPdf pdf) {
+    }
+
+    /**
+     * 시드 CSV 를 직접 읽는 리더 ({@code SeedLoader} 가 실제로 쓰는 것과 같은 빈).
+     * 시드가 커질 때마다 테스트의 하드코딩 숫자를 손으로 맞추는 대신, "로더가 읽는 CSV 행 수"를
+     * 테스트도 같은 소스에서 세게 한다 — 시드 개수 자체가 아니라 "로더가 CSV 를 빠짐없이 실었는가"를 잠근다.
+     */
+    @Autowired
+    protected SeedCsvReader seedCsvReader;
+
+    /** 시드 작곡가 총 수 (composers.csv 행 수). */
+    protected int seedComposerCount() {
+        return seedCsvReader.read(COMPOSERS_CSV).size();
+    }
+
+    /** 시드 곡 총 수 (works.csv 행 수). */
+    protected int seedWorkCount() {
+        return seedCsvReader.read(WORKS_CSV).size();
+    }
+
+    /** composers.csv 원본 행 (헤더: name_ko, name_original, birth_year, death_year, aliases, nationality). */
+    protected List<Map<String, String>> seedComposerRows() {
+        return seedCsvReader.read(COMPOSERS_CSV);
+    }
+
+    /** works.csv 원본 행 (헤더: seq, composer_original, title_ko, title_original, …). */
+    protected List<Map<String, String>> seedWorkRows() {
+        return seedCsvReader.read(WORKS_CSV);
+    }
+
+    /** composer_original 이 일치하는 시드 곡 수 (예: "Chopin, Frédéric"). */
+    protected int seedWorkCountFor(String composerOriginal) {
+        int count = 0;
+        for (Map<String, String> row : seedCsvReader.read(WORKS_CSV)) {
+            if (composerOriginal.equals(row.get("composer_original"))) {
+                count++;
+            }
+        }
+        return count;
     }
 
     // ===== 조회 헬퍼 =====
@@ -209,12 +252,18 @@ public abstract class SheetMusicFixtureSupport extends ApiIntegrationTestSupport
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("data").path("id").asLong();
     }
 
-    /** PUT /api/admin/works/{workId}/recommended-edition — 02 §5-6. */
+    /**
+     * PUT /api/admin/works/{workId}/recommended-edition — 02 §5-6.
+     *
+     * <p><b>2026-09-21 개정 대응</b>: 사유가 필수가 되면서({@code AdminApiTestSupport.recommendBody} 와 같은 대응)
+     * 이 공개 API 픽스처도 기본 사유를 함께 보낸다 — 이 픽스처 자체는 "사유" 를 시험하지 않는다
+     * (그건 {@code RecommendReasonIntegrationTest} 의 일이다), 그저 판본을 추천으로 세우는 전제 조건일 뿐이다.
+     */
     protected void recommendEdition(Tokens admin, long workId, long editionId) throws Exception {
         mockMvc.perform(put("/api/admin/works/{workId}/recommended-edition", workId)
                         .header(HttpHeaders.AUTHORIZATION, bearer(admin.accessToken()))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"editionId\": " + editionId + "}"))
+                        .content("{\"editionId\": " + editionId + ", \"reason\": \"BETTER_READABILITY\"}"))
                 .andExpect(status().isOk());
     }
 

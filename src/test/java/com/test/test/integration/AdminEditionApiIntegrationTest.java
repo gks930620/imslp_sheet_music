@@ -359,20 +359,24 @@ class AdminEditionApiIntegrationTest extends AdminApiTestSupport {
         long otherWorkId = createWork(admin, composerId);
 
         long infoOnly = createInfoEdition(admin, workId);
-        adminPut(admin, "/api/admin/works/{workId}/recommended-edition", json("editionId", infoOnly), workId)
+        adminPut(admin, "/api/admin/works/{workId}/recommended-edition",
+                        recommendBody(infoOnly, "BETTER_READABILITY", null, null), workId)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("BUSINESS_RULE_VIOLATION"))
                 .andExpect(jsonPath("$.message").value("파일이 없어 추천으로 지정할 수 없어요"));
 
         long otherWorksEdition = createFileEdition(admin, otherWorkId, "FREE", "근거");
-        adminPut(admin, "/api/admin/works/{workId}/recommended-edition", json("editionId", otherWorksEdition), workId)
+        adminPut(admin, "/api/admin/works/{workId}/recommended-edition",
+                        recommendBody(otherWorksEdition, "BETTER_READABILITY", null, null), workId)
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("NOT_FOUND"));
-        adminPut(admin, "/api/admin/works/{workId}/recommended-edition", json("editionId", 99_999_999L), workId)
+        adminPut(admin, "/api/admin/works/{workId}/recommended-edition",
+                        recommendBody(99_999_999L, "BETTER_READABILITY", null, null), workId)
                 .andExpect(status().isNotFound());
 
         long unknownEdition = createFileEdition(admin, workId, "UNKNOWN", null);
-        adminPut(admin, "/api/admin/works/{workId}/recommended-edition", json("editionId", unknownEdition), workId)
+        adminPut(admin, "/api/admin/works/{workId}/recommended-edition",
+                        recommendBody(unknownEdition, "BETTER_READABILITY", null, null), workId)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.workId").value(workId))
                 .andExpect(jsonPath("$.data.previousEditionId").value(org.hamcrest.Matchers.nullValue()))
@@ -383,7 +387,8 @@ class AdminEditionApiIntegrationTest extends AdminApiTestSupport {
                 .andExpect(jsonPath("$.data.warning").doesNotExist());
 
         long freeEdition = createFileEdition(admin, workId, "FREE", "근거");
-        adminPut(admin, "/api/admin/works/{workId}/recommended-edition", json("editionId", freeEdition), workId)
+        adminPut(admin, "/api/admin/works/{workId}/recommended-edition",
+                        recommendBody(freeEdition, "BETTER_READABILITY", null, null), workId)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.previousEditionId").value(unknownEdition))
                 .andExpect(jsonPath("$.data.editionId").value(freeEdition))
@@ -507,7 +512,8 @@ class AdminEditionApiIntegrationTest extends AdminApiTestSupport {
         assertThat(work.path("editions").get(0).path("isRecommended").asBoolean()).isFalse();
 
         // 같은 판본을 다시 추천으로 지정하려 하면 §5-6 이 막는다 = 방금 상태는 저장돼 있으면 안 되는 상태였다
-        adminPut(admin, "/api/admin/works/{workId}/recommended-edition", json("editionId", editionId), workId)
+        adminPut(admin, "/api/admin/works/{workId}/recommended-edition",
+                        recommendBody(editionId, "BETTER_READABILITY", null, null), workId)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("파일이 없어 추천으로 지정할 수 없어요"));
     }

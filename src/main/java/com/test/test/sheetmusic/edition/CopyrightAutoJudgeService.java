@@ -2,6 +2,7 @@ package com.test.test.sheetmusic.edition;
 
 import com.test.test.sheetmusic.edition.dto.AutoJudgeDTOs;
 import com.test.test.sheetmusic.edition.repository.EditionRepository;
+import com.test.test.sheetmusic.recommendation.RecommendationLogService;
 import com.test.test.sheetmusic.work.repository.WorkRepository;
 import java.time.Instant;
 import java.time.Year;
@@ -43,15 +44,18 @@ public class CopyrightAutoJudgeService {
 
     private final EditionRepository editionRepository;
     private final WorkRepository workRepository;
+    private final RecommendationLogService recommendationLogService;
     private final TransactionTemplate transactionTemplate;
     private final ZoneId timezone;
 
     public CopyrightAutoJudgeService(EditionRepository editionRepository,
                                      WorkRepository workRepository,
+                                     RecommendationLogService recommendationLogService,
                                      TransactionTemplate transactionTemplate,
                                      @Value("${app.timezone}") String timezone) {
         this.editionRepository = editionRepository;
         this.workRepository = workRepository;
+        this.recommendationLogService = recommendationLogService;
         this.transactionTemplate = transactionTemplate;
         this.timezone = ZoneId.of(timezone);
     }
@@ -85,7 +89,7 @@ public class CopyrightAutoJudgeService {
 
         int judgedFree = newlyFreeEditionIds.size();
         int recommendedAssigned = request.isAssignRecommended()
-                ? assignRecommendedInTransaction(newlyFreeEditionIds, dryRun)
+                ? assignRecommendedInTransaction(newlyFreeEditionIds, dryRun, judgedAt)
                 : 0;
 
         return AutoJudgeDTOs.AutoJudgeResult.builder()
@@ -126,8 +130,9 @@ public class CopyrightAutoJudgeService {
     }
 
     /** 추천 지정도 판정 청크와 분리된 트랜잭션에서 한다 — 후보는 "파일 있는 전곡 악보" 라 수가 적다. */
-    private int assignRecommendedInTransaction(Set<Long> newlyFreeEditionIds, boolean dryRun) {
-        Integer assigned = transactionTemplate.execute(status -> assignRecommended(newlyFreeEditionIds, dryRun));
+    private int assignRecommendedInTransaction(Set<Long> newlyFreeEditionIds, boolean dryRun, Instant decidedAt) {
+        Integer assigned = transactionTemplate.execute(status ->
+                assignRecommended(newlyFreeEditionIds, dryRun, decidedAt));
         return assigned == null ? 0 : assigned;
     }
 
@@ -135,8 +140,12 @@ public class CopyrightAutoJudgeService {
      * 추천이 없는 곡마다 {@code FREE} 이고 파일이 있는 전곡·전체 악보 판본을 하나 골라 추천으로 지정한다.
      * 판정만 하면 곡이 계속 {@code PREPARING} 이라 사용자가 받을 수 있는 곡은 여전히 0개다.
      * <b>이미 추천이 있는 곡은 건드리지 않는다</b>(관리자가 손으로 지정한 것을 덮지 않는다).
+     *
+     * <p>지정한 곡마다 근거 한 줄도 함께 쌓는다(01_ERD §3-13, 02 §5-11, 2026-09-21) — {@code candidateCount} 는
+     * 정렬 전 그 곡의 후보 수, {@code imslpDownloadCount} 는 고른 판본의 <b>그 순간</b> 값이다. {@code dryRun} 이면
+     * 부르지 않는다.
      */
-    private int assignRecommended(Set<Long> newlyFreeEditionIds, boolean dryRun) {
+    private int assignRecommended(Set<Long> newlyFreeEditionIds, boolean dryRun, Instant decidedAt) {
         Map<Long, List<EditionEntity>> byWork = new LinkedHashMap<>();
         for (EditionEntity edition : editionRepository.findRecommendCandidates()) {
             boolean free = edition.getKoreaCopyright() == KoreaCopyright.FREE
@@ -146,11 +155,13 @@ public class CopyrightAutoJudgeService {
             }
         }
         int assigned = 0;
-        for (List<EditionEntity> candidates : byWork.values()) {
+        for (Map.Entry<Long, List<EditionEntity>> entry : byWork.entrySet()) {
+            List<EditionEntity> candidates = entry.getValue();
             candidates.sort(RECOMMEND_ORDER);
             EditionEntity best = candidates.get(0);
             if (!dryRun) {
                 best.getWork().recommend(best);
+                recommendationLogService.recordAutoAssigned(entry.getKey(), best, candidates.size(), 1, decidedAt);
             }
             assigned++;
         }

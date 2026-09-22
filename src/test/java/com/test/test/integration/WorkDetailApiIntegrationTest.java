@@ -23,9 +23,12 @@ class WorkDetailApiIntegrationTest extends SheetMusicFixtureSupport {
     private static final String MOONLIGHT = "Piano Sonata No.14, Op.27 No.2";
 
     @Test
-    @DisplayName("시드 곡(월광) 상세: 기본 필드·별칭·IMSLP 링크·추천 없음(PREPARING)·같은 작곡가 곡 4개")
+    @DisplayName("시드 곡(월광) 상세: 기본 필드·별칭·IMSLP 링크·추천 없음(PREPARING)·같은 작곡가 곡 최대 5개")
     void seedWork_detailFields() throws Exception {
         long id = findSeedWorkId("월광", MOONLIGHT);
+        // sameComposerWorks 는 "같은 작곡가의 다른 공개 곡, 최대 5" 다(02 §3-3) — 베토벤 시드가 5곡을 넘으면
+        // 상한 5 에서 멈춘다. 시드가 더 늘어도 다시 손댈 필요가 없도록 상한값 자체로 기대치를 만든다.
+        int expectedSameComposerWorks = Math.min(5, seedWorkCountFor("Beethoven, Ludwig van") - 1);
 
         mockMvc.perform(get("/api/works/{id}", id))
                 .andExpect(status().isOk())
@@ -52,8 +55,7 @@ class WorkDetailApiIntegrationTest extends SheetMusicFixtureSupport {
                 .andExpect(jsonPath("$.data.recommendedEdition").value(nullValue()))
                 .andExpect(jsonPath("$.data.otherEditions", hasSize(0)))
                 .andExpect(jsonPath("$.data.downloadableOtherCount").value(0))
-                // 베토벤 시드 5곡 중 자기 제외 4곡 (최대 5)
-                .andExpect(jsonPath("$.data.sameComposerWorks", hasSize(4)));
+                .andExpect(jsonPath("$.data.sameComposerWorks", hasSize(expectedSameComposerWorks)));
 
         JsonNode data = getJson("/api/works/{id}", id).path("data");
         List<String> aliases = new ArrayList<>();

@@ -72,6 +72,17 @@ function NeedsReviewBadge({ work }) {
   return <span className="status-badge badge-needs-review">미검수</span>;
 }
 
+/**
+ * 02 §4-6 recommendationSource — 지금 추천을 누가 골랐나. 값은 넷: 추천 없음(`–`) / 자동 / 사람 / 기록 없음(null).
+ * "기록 없음" 은 enum 이 아니라 null 이다 — 추천은 있는데 기록이 없는 실데이터 42곡의 정상 상태(§4-7-2).
+ */
+function RecommendationSourceCell({ work }) {
+  if (!work.hasRecommended) return "–";
+  if (work.recommendationSource === "AUTO") return "자동";
+  if (work.recommendationSource === "ADMIN") return "사람";
+  return "기록 없음";
+}
+
 function WorkStatusBadges({ work }) {
   if (work.hidden) {
     return (
@@ -274,13 +285,7 @@ export function WorkAdminListPage() {
                     </span>
                     <span className="admin-work-editions">{work.editionCount}</span>
                     <span className="admin-work-recommended">
-                      {work.hasRecommended ? (
-                        <span className="material-icons admin-work-star" aria-label="추천 판본 있음">
-                          star
-                        </span>
-                      ) : (
-                        "–"
-                      )}
+                      <RecommendationSourceCell work={work} />
                     </span>
                     <span className="admin-work-status">
                       <WorkStatusBadges work={work} />

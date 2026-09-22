@@ -2,6 +2,7 @@ package com.test.test.sheetmusic.work.dto;
 
 import com.test.test.sheetmusic.composer.ComposerEntity;
 import com.test.test.sheetmusic.edition.dto.AdminEditionDTO;
+import com.test.test.sheetmusic.recommendation.dto.RecommendationSummaryDTO;
 import com.test.test.sheetmusic.work.HiddenReason;
 import com.test.test.sheetmusic.work.Level;
 import com.test.test.sheetmusic.work.WorkMissing;
@@ -46,6 +47,11 @@ public class AdminWorkDetailDTO {
     private Long candidateEditionId;
     /** 지금 추천 판본이 사람 눈을 통과했는가 (02 §4-7 · §5-6-1, 2026-09-08 신설). */
     private boolean recommendationReviewed;
+    /**
+     * "이 판본을 고른 이유" + "바뀐 이력" 최근 5줄 (02 §4-7-2, 2026-09-21 신설). 추천·기록이 없어도
+     * 객체는 항상 있다({@code current: null, history: []}) — 빈 상태를 두 가지로 만들지 않는다.
+     */
+    private RecommendationSummaryDTO recommendation;
     private long downloadCount;
     private boolean hasDownloadHistory;
     private List<AdminEditionDTO> editions;

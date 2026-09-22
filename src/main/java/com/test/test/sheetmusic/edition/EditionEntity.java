@@ -17,8 +17,6 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -405,24 +403,6 @@ public class EditionEntity {
     public boolean isRecommendedByWork() {
         EditionEntity recommended = this.work == null ? null : this.work.getRecommendedEdition();
         return recommended != null && recommended.getId() != null && recommended.getId().equals(this.id);
-    }
-
-    /**
-     * 추천으로 지정할 때 관리자에게 알릴 것 — <b>해당되는 것이 전부</b>, 고정 순서 (02 §5-6, 기획 §11-2 ①).
-     * 경고는 안내이지 거부가 아니다(막는 것은 파일 없음 하나뿐이다). 해당 없으면 빈 목록이다.
-     */
-    public List<RecommendWarning> recommendWarnings() {
-        List<RecommendWarning> warnings = new ArrayList<>();
-        if (this.koreaCopyright != KoreaCopyright.FREE) {
-            warnings.add(RecommendWarning.NOT_DOWNLOADABLE);
-        }
-        if (this.kind == EditionKind.ARRANGEMENT) {
-            warnings.add(RecommendWarning.ARRANGEMENT);
-        }
-        if (this.scope == EditionScope.MOVEMENT) {
-            warnings.add(RecommendWarning.PARTIAL_SCOPE);
-        }
-        return warnings;
     }
 
     /**

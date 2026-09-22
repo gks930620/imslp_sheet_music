@@ -6,6 +6,8 @@ import com.test.test.common.exception.DuplicateResourceException;
 import com.test.test.common.exception.EntityNotFoundException;
 import com.test.test.common.exception.FieldValidationException;
 import com.test.test.file.entity.FileEntity;
+import com.test.test.jwt.model.CustomUserAccount;
+import com.test.test.sheetmusic.common.CurrentUser;
 import com.test.test.sheetmusic.common.ImslpUrlNormalizer;
 import com.test.test.sheetmusic.common.SearchNormalizer;
 import com.test.test.sheetmusic.crawl.EditionFileFetcher;
@@ -15,6 +17,9 @@ import com.test.test.sheetmusic.edition.dto.EditionSaveDTO;
 import com.test.test.sheetmusic.edition.repository.DownloadLogRepository;
 import com.test.test.sheetmusic.edition.repository.EditionRepository;
 import com.test.test.sheetmusic.member.repository.UserWorkDownloadRepository;
+import com.test.test.sheetmusic.recommendation.RecommendationClearedReason;
+import com.test.test.sheetmusic.recommendation.RecommendationLogService;
+import com.test.test.sheetmusic.recommendation.RecommendationReason;
 import com.test.test.sheetmusic.work.WorkEntity;
 import com.test.test.sheetmusic.work.repository.WorkRepository;
 import java.time.Instant;
@@ -54,6 +59,7 @@ public class AdminEditionService {
     private final EditionDtoAssembler editionDtoAssembler;
     private final EditionFileFetcher editionFileFetcher;
     private final CopyrightAutoJudgeService copyrightAutoJudgeService;
+    private final RecommendationLogService recommendationLogService;
     private final TransactionTemplate transactionTemplate;
 
     // ===== §5-2 / §5-3 저장 =====
@@ -113,9 +119,9 @@ public class AdminEditionService {
     }
 
     /** 얇은 진입점 — {@link #create} 와 같은 이유로 쪽수 폴백을 트랜잭션 밖에서 먼저 계산한다. */
-    public AdminEditionDTO update(Long editionId, EditionSaveDTO request, String username) {
+    public AdminEditionDTO update(Long editionId, EditionSaveDTO request, CustomUserAccount account) {
         Integer resolvedPageCount = resolveNewFilePageCount(editionId, request);
-        return transactionTemplate.execute(status -> updateInTransaction(editionId, request, username,
+        return transactionTemplate.execute(status -> updateInTransaction(editionId, request, account,
                 resolvedPageCount));
     }
 
@@ -136,8 +142,9 @@ public class AdminEditionService {
         return editionFileService.pageCountOfUploadedFile(request.getFileId());
     }
 
-    private AdminEditionDTO updateInTransaction(Long editionId, EditionSaveDTO request, String username,
+    private AdminEditionDTO updateInTransaction(Long editionId, EditionSaveDTO request, CustomUserAccount account,
                                                 Integer resolvedPageCount) {
+        String username = username(account);
         EditionEntity edition = findOrThrow(editionId);
         validate(request);
         WorkEntity work = edition.getWork();
@@ -173,6 +180,9 @@ public class AdminEditionService {
             // 그러지 않으면 §5-6 이 400 으로 막는 "파일 없는 추천 판본" 이 저장돼 곡이 준비된 것처럼 보인다.
             // 다른 파일로 교체하는 경우(fileId 있음)는 파일이 계속 있으므로 추천을 유지한다.
             if (request.getFileId() == null && isRecommended(work, edition)) {
+                // 추천이 풀리기 전에 "그때의 판본" 을 스냅샷한다 (01_ERD §3-13, 02 §5-3 2026-09-21).
+                recommendationLogService.recordCleared(work.getId(), CurrentUser.id(account), nickname(account),
+                        edition, RecommendationClearedReason.EDITION_FILE_REMOVED, Instant.now());
                 work.clearRecommendation();
                 workRepository.flush();
             }
@@ -201,9 +211,14 @@ public class AdminEditionService {
     // ===== §5-5 삭제 =====
 
     @Transactional
-    public void delete(Long editionId) {
+    public void delete(Long editionId, CustomUserAccount account) {
         EditionEntity edition = findOrThrow(editionId);
         WorkEntity work = edition.getWork();
+        if (isRecommended(work, edition)) {
+            // 지워지기 전에 "그때의 판본" 을 스냅샷한다 (01_ERD §3-13, 02 §5-5 2026-09-21).
+            recommendationLogService.recordCleared(work.getId(), CurrentUser.id(account), nickname(account),
+                    edition, RecommendationClearedReason.EDITION_DELETED, Instant.now());
+        }
         removeEditions(work, List.of(edition));
     }
 
@@ -242,30 +257,106 @@ public class AdminEditionService {
         }
         editionRepository.deleteAll(editions);
         editionRepository.flush();
+        // 이 판본들을 가리키던 이력 줄의 id 만 비운다 — 스냅샷 6개는 남는다(01_ERD §3-13·§7, 2026-09-21).
+        recommendationLogService.detachEditionReferences(editionIds);
         editionFileService.deleteFiles(fileIds);
     }
 
-    // ===== §5-6 추천 지정 =====
+    // ===== §5-6 추천 지정 (2026-09-21 전면 개정 — 기획 06 §1-4·§3-1·§3-2·§3-3) =====
 
+    /**
+     * 순서가 계약이다: <b>404(곡·판본 존재) → 400(사유·메모) → 400(파일 없음) → 저장</b>. 없는 곡/판본에
+     * 사유 오류를 먼저 말하면 "그 곡이 있다" 는 사실이 새어 나간다(§0-3 과 같은 원칙 — 02 §5-6).
+     *
+     * <p>{@code warnings} 는 <b>{@link WorkEntity#recommend} 를 부르기 전</b>에 계산한다 — {@code
+     * WORK_BECOMES_CLOSED} 는 "바꾸면 닫힌다" 는 말이라 지정한 뒤에 세면 이미 닫혀 있어 영영 뜨지 않는다.
+     */
     @Transactional
-    public CopyrightDTOs.RecommendResult recommend(Long workId, Long editionId) {
+    public CopyrightDTOs.RecommendResult recommend(Long workId, CopyrightDTOs.RecommendRequest request,
+                                                    CustomUserAccount account) {
+        WorkEntity work = workRepository.findById(workId)
+                .orElseThrow(() -> EntityNotFoundException.of("곡", workId));
+        EditionEntity edition = editionRepository.findById(request.getEditionId())
+                .filter(e -> e.getWork().getId().equals(workId))
+                .orElseThrow(() -> EntityNotFoundException.of("판본", request.getEditionId()));
+
+        RecommendationReason reason = parseReason(request.getReason());
+        String note = normalizeAndValidateNote(reason, request.getNote());
+
+        if (!edition.hasFile()) {
+            throw new BusinessRuleException("파일이 없어 추천으로 지정할 수 없어요");
+        }
+
+        List<RecommendWarning> warnings = warningsFor(work, edition);
+        EditionEntity previousEdition = work.getRecommendedEdition();
+        Long previousEditionId = previousEdition == null ? null : previousEdition.getId();
+        boolean changed = previousEditionId == null || !previousEditionId.equals(edition.getId());
+
+        if (changed) {
+            // 실제로 바뀔 때만 근거 한 줄을 쌓는다 — 같은 판본 재지정은 "정해진 순간" 이 아니다(01_ERD §7).
+            recommendationLogService.recordAdminAssigned(workId, CurrentUser.id(account), nickname(account),
+                    edition, previousEdition, reason, note, Instant.now());
+        }
+        work.recommend(edition);
+        if (Boolean.TRUE.equals(request.getReviewed())) {
+            work.reviewRecommendation(true);
+        }
+
+        return CopyrightDTOs.RecommendResult.builder()
+                .workId(workId)
+                .previousEditionId(previousEditionId)
+                .editionId(edition.getId())
+                .workStatus(work.status())
+                .recommendationReviewed(work.isRecommendedEditionReviewed())
+                .warnings(warnings)
+                .build();
+    }
+
+    // ===== §5-6-2 바꾸기 전 경고 예고 (2026-09-21 신설) =====
+
+    /** §5-6 과 <b>같은 함수</b>({@link #warningsFor})로 계산한다 — 예고와 결과가 어긋날 수 없다(03 §30-3). */
+    @Transactional(readOnly = true)
+    public CopyrightDTOs.RecommendPreviewResult previewRecommend(Long workId, Long editionId) {
         WorkEntity work = workRepository.findById(workId)
                 .orElseThrow(() -> EntityNotFoundException.of("곡", workId));
         EditionEntity edition = editionRepository.findById(editionId)
                 .filter(e -> e.getWork().getId().equals(workId))
                 .orElseThrow(() -> EntityNotFoundException.of("판본", editionId));
-        if (!edition.hasFile()) {
-            throw new BusinessRuleException("파일이 없어 추천으로 지정할 수 없어요");
-        }
-        Long previous = work.getRecommendedEdition() == null ? null : work.getRecommendedEdition().getId();
-        work.recommend(edition);
-        return CopyrightDTOs.RecommendResult.builder()
+        return CopyrightDTOs.RecommendPreviewResult.builder()
                 .workId(workId)
-                .previousEditionId(previous)
                 .editionId(editionId)
-                .workStatus(work.status())
-                .warnings(edition.recommendWarnings())
+                .warnings(warningsFor(work, edition))
                 .build();
+    }
+
+    /** §5-6·§5-6-2 공용 — 경고 6종(02 §5-6-2)을 <b>바뀌기 전</b> 상태로 계산한다. */
+    private List<RecommendWarning> warningsFor(WorkEntity work, EditionEntity edition) {
+        boolean hasDownloadHistory = downloadLogRepository.existsByWorkId(work.getId());
+        return RecommendChangeWarnings.calculate(work.status(), hasDownloadHistory, edition);
+    }
+
+    /** 없거나 모르는 값은 400 field {@code reason} — 404 확인이 끝난 뒤에만 부른다(검증 순서 계약). */
+    private RecommendationReason parseReason(String rawReason) {
+        if (rawReason == null || rawReason.isBlank()) {
+            throw FieldValidationException.of("reason", "왜 이 판본을 골랐는지 골라 주세요", rawReason);
+        }
+        try {
+            return RecommendationReason.valueOf(rawReason);
+        } catch (IllegalArgumentException e) {
+            throw FieldValidationException.of("reason", "왜 이 판본을 골랐는지 골라 주세요", rawReason);
+        }
+    }
+
+    /** 공백만 있으면 null 로 정규화한다. {@code OTHER} 면 필수, 전체 300자 제한(02 §0-6). */
+    private String normalizeAndValidateNote(RecommendationReason reason, String rawNote) {
+        String note = (rawNote == null || rawNote.isBlank()) ? null : rawNote.trim();
+        if (reason == RecommendationReason.OTHER && note == null) {
+            throw FieldValidationException.of("note", "왜 이 판본을 골랐는지 적어 주세요", rawNote);
+        }
+        if (note != null && note.length() > 300) {
+            throw FieldValidationException.of("note", "300자를 넘을 수 없어요", rawNote);
+        }
+        return note;
     }
 
     // ===== §5-7 파일 받아오기 =====
@@ -392,6 +483,15 @@ public class AdminEditionService {
     private boolean isRecommended(WorkEntity work, EditionEntity edition) {
         return work != null && work.getRecommendedEdition() != null
                 && Objects.equals(work.getRecommendedEdition().getId(), edition.getId());
+    }
+
+    private String username(CustomUserAccount account) {
+        return account == null ? null : account.getUsername();
+    }
+
+    /** 추천 근거의 "그때의 닉네임" 스냅샷 (01_ERD §3-13) — 로그인 아이디를 남기지 않는다. */
+    private String nickname(CustomUserAccount account) {
+        return account == null ? null : account.getNickname();
     }
 
     private EditionEntity findOrThrow(Long editionId) {

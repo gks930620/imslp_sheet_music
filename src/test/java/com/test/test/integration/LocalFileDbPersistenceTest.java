@@ -1,6 +1,7 @@
 package com.test.test.integration;
 
 import com.test.test.SheetMusicApplication;
+import com.test.test.sheetmusic.seed.SeedCsvReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -27,8 +28,12 @@ class LocalFileDbPersistenceTest {
 
     /** 시드 사용자 수 (data-users.sql id 1~111). 두 번째 기동에서 늘어나면 안 된다. */
     private static final int SEED_USER_COUNT = 111;
-    /** CSV 시드 곡 수 (01_ERD §6, works.csv). 두 번째 기동에서 늘어나면 안 된다(로더 멱등). */
-    private static final int SEED_WORK_COUNT = 50;
+    /**
+     * CSV 시드 곡 수 (01_ERD §6, works.csv) — 하드코딩하지 않고 로더가 실제로 읽는 CSV 를 직접 센다.
+     * 큐레이션으로 시드가 커져도 이 파일을 다시 손댈 필요가 없다. {@code SeedCsvReader} 는 의존성이
+     * 없는 순수 컴포넌트라 스프링 컨텍스트 없이 바로 쓸 수 있다.
+     */
+    private static final int SEED_WORK_COUNT = new SeedCsvReader().read("seed/works.csv").size();
 
     @Test
     void data_survives_a_restart_and_seed_scripts_do_not_run_twice(@TempDir Path dir) throws Exception {

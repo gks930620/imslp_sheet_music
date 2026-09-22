@@ -453,3 +453,14 @@ export function formatDecidedBy(log) {
   if (log.source === "AUTO") return "자동";
   return log.decidedByNickname ? `${log.decidedByNickname} 님` : "관리자";
 }
+
+/**
+ * A-1 상자·A-3 패널의 "누가 골랐나" 한 줄 — `자동으로 골랐어요` / `{닉네임} 님이 골랐어요` / `관리자가 골랐어요`.
+ * `formatDecidedBy` 와 다른 이유: 저 함수는 이력 줄의 짧은 이름표("자동"·"{닉네임} 님")이고, 이건 문장이다.
+ * 닉네임이 없을 때 `관리자가`(가)와 있을 때 `{닉네임} 님이`(이)의 조사가 갈려 단순 접미사로 합칠 수 없다.
+ */
+export function formatAssignedByLine(current) {
+  if (!current) return "";
+  if (current.source === "AUTO") return "자동으로 골랐어요";
+  return current.decidedByNickname ? `${current.decidedByNickname} 님이 골랐어요` : "관리자가 골랐어요";
+}

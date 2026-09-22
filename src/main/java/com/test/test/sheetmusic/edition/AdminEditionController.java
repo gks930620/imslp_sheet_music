@@ -61,7 +61,7 @@ public class AdminEditionController {
             @PathVariable Long id,
             @Valid @RequestBody EditionSaveDTO request,
             @AuthenticationPrincipal CustomUserAccount account) {
-        return ResponseEntity.ok(ApiResponse.success(adminEditionService.update(id, request, username(account))));
+        return ResponseEntity.ok(ApiResponse.success(adminEditionService.update(id, request, account)));
     }
 
     @GetMapping("/editions/{id}")
@@ -70,18 +70,26 @@ public class AdminEditionController {
     }
 
     @DeleteMapping("/editions/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        adminEditionService.delete(id);
+    public ResponseEntity<Void> delete(@PathVariable Long id, @AuthenticationPrincipal CustomUserAccount account) {
+        adminEditionService.delete(id, account);
         return ResponseEntity.noContent().build();
     }
 
-    // ===== §5-6 추천 지정 =====
+    // ===== §5-6 추천 지정 · §5-6-2 바꾸기 전 경고 예고 =====
 
     @PutMapping("/works/{workId}/recommended-edition")
     public ResponseEntity<ApiResponse<CopyrightDTOs.RecommendResult>> recommend(
             @PathVariable Long workId,
-            @Valid @RequestBody CopyrightDTOs.RecommendRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(adminEditionService.recommend(workId, request.getEditionId())));
+            @Valid @RequestBody CopyrightDTOs.RecommendRequest request,
+            @AuthenticationPrincipal CustomUserAccount account) {
+        return ResponseEntity.ok(ApiResponse.success(adminEditionService.recommend(workId, request, account)));
+    }
+
+    @GetMapping("/works/{workId}/recommended-edition/preview")
+    public ResponseEntity<ApiResponse<CopyrightDTOs.RecommendPreviewResult>> previewRecommend(
+            @PathVariable Long workId,
+            @RequestParam Long editionId) {
+        return ResponseEntity.ok(ApiResponse.success(adminEditionService.previewRecommend(workId, editionId)));
     }
 
     // ===== §5-7 파일 받아오기 =====

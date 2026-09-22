@@ -1,5 +1,6 @@
 package com.test.test.sheetmusic.work.dto;
 
+import com.test.test.sheetmusic.recommendation.RecommendationSource;
 import com.test.test.sheetmusic.work.Level;
 import com.test.test.sheetmusic.work.WorkStatus;
 import java.time.Instant;
@@ -29,6 +30,11 @@ public class AdminWorkSummaryDTO {
      * {@code hasRecommended == false} 인 곡은 항상 false 다(검수할 대상이 없다).
      */
     private boolean recommendationReviewed;
+    /**
+     * 지금 추천을 누가 골랐나 (02 §4-6, 2026-09-21 신설) — {@code AUTO}/{@code ADMIN}/{@code null}.
+     * {@code hasRecommended == false} 면 항상 null. 기록 없음(실데이터 42곡)도 null — enum 상수로 만들지 않는다.
+     */
+    private RecommendationSource recommendationSource;
     private WorkStatus status;
     private boolean needsWork;
     private boolean hidden;

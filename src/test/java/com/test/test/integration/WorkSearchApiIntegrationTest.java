@@ -3,6 +3,7 @@ package com.test.test.integration;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -22,8 +23,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * GET /api/works/search — docs/설계/02_API_명세서.md §3-1.
- * 인수조건(기획 01 §6 "검색")은 실제 시드(작곡가 25·곡 50, 01_ERD §6)로 검증하고,
+ * 인수조건(기획 01 §6 "검색")은 실제 시드(01_ERD §6)로 검증하고,
  * 판본이 필요한 필터·정렬은 관리자 API 로 만든 데이터로 검증한다.
+ *
+ * <p>시드 곡 수는 CSV 를 세어 만든다({@code SheetMusicFixtureSupport#seedWorkCountFor}) —
+ * 시드가 커져도 이 파일의 숫자를 다시 맞출 필요가 없게 하기 위해서다.
  */
 class WorkSearchApiIntegrationTest extends SheetMusicFixtureSupport {
 
@@ -150,17 +154,18 @@ class WorkSearchApiIntegrationTest extends SheetMusicFixtureSupport {
         }
 
         @Test
-        @DisplayName("작곡가 카드: \"베토벤\" → composers[0]=베토벤(workCount 5), composerMatchCount 1, 곡 5")
+        @DisplayName("작곡가 카드: \"베토벤\" → composers[0]=베토벤, composerMatchCount 1, 곡 수는 시드와 일치")
         void composerCard_beethoven() throws Exception {
+            int beethovenWorks = seedWorkCountFor("Beethoven, Ludwig van");
             mockMvc.perform(get("/api/works/search").param("q", "베토벤"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.composers", hasSize(1)))
                     .andExpect(jsonPath("$.data.composers[0].id").isNumber())
                     .andExpect(jsonPath("$.data.composers[0].nameKo").value("베토벤"))
                     .andExpect(jsonPath("$.data.composers[0].nameOriginal").value("Beethoven, Ludwig van"))
-                    .andExpect(jsonPath("$.data.composers[0].workCount").value(5))
+                    .andExpect(jsonPath("$.data.composers[0].workCount").value(beethovenWorks))
                     .andExpect(jsonPath("$.data.composerMatchCount").value(1))
-                    .andExpect(jsonPath("$.data.works.totalElements").value(5))
+                    .andExpect(jsonPath("$.data.works.totalElements").value(beethovenWorks))
                     // 작곡가 이름으로 설명되는 검색어 → matchedAlias 전부 null
                     .andExpect(jsonPath("$.data.works.content[*].matchedAlias").value(everyItem(nullValue())));
         }
@@ -190,7 +195,7 @@ class WorkSearchApiIntegrationTest extends SheetMusicFixtureSupport {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.composers", hasSize(1)))
                     .andExpect(jsonPath("$.data.works.totalElements").value(0))
-                    .andExpect(jsonPath("$.data.unfilteredTotal").value(5));
+                    .andExpect(jsonPath("$.data.unfilteredTotal").value(seedWorkCountFor("Beethoven, Ludwig van")));
         }
 
         @Test
@@ -211,17 +216,32 @@ class WorkSearchApiIntegrationTest extends SheetMusicFixtureSupport {
         }
 
         @Test
-        @DisplayName("난이도 필터(시드): \"체르니\" level=ELEMENTARY → 초급 2곡, unfilteredTotal 3")
+        @DisplayName("난이도 필터(시드): \"체르니\" level=ELEMENTARY → 초급만, unfilteredTotal 은 시드 전체 곡 수")
         void levelFilter_seed() throws Exception {
+            int czernyTotal = seedWorkCountFor("Czerny, Carl");
+            int elementaryOrIntermediate = 0;
+            int elementary = 0;
+            for (Map<String, String> row : seedWorkRows()) {
+                if ("Czerny, Carl".equals(row.get("composer_original"))) {
+                    String level = row.get("level");
+                    if ("ELEMENTARY".equals(level)) {
+                        elementary++;
+                    }
+                    if ("ELEMENTARY".equals(level) || "INTERMEDIATE".equals(level)) {
+                        elementaryOrIntermediate++;
+                    }
+                }
+            }
+
             mockMvc.perform(get("/api/works/search").param("q", "체르니").param("level", "ELEMENTARY"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.works.totalElements").value(2))
-                    .andExpect(jsonPath("$.data.unfilteredTotal").value(3))
+                    .andExpect(jsonPath("$.data.works.totalElements").value(elementary))
+                    .andExpect(jsonPath("$.data.unfilteredTotal").value(czernyTotal))
                     .andExpect(jsonPath("$.data.works.content[*].level").value(everyItem(is("ELEMENTARY"))));
 
             mockMvc.perform(get("/api/works/search").param("q", "체르니").param("level", "ELEMENTARY,INTERMEDIATE"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.works.totalElements").value(3));
+                    .andExpect(jsonPath("$.data.works.totalElements").value(elementaryOrIntermediate));
         }
     }
 

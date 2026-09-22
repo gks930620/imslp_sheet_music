@@ -2,6 +2,7 @@ package com.test.test.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.test.test.integration.support.AdminApiTestSupport;
+import com.test.test.sheetmusic.seed.SeedCsvReader;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,19 +31,26 @@ class SeedDeletionIntegrationTest extends AdminApiTestSupport {
 
     private static final String SEED_LOADER_BEAN = "seedLoader";
     private static final String DELETED_TITLE = "3 Gymnopédies";
-    private static final int SEED_WORK_COUNT = 50;
 
     @Autowired
     private ApplicationContext applicationContext;
+    @Autowired
+    private SeedCsvReader seedCsvReader;
+
+    /** {@code seed/works.csv} 행 수. 하드코딩 대신 로더가 실제로 읽는 소스를 센다 — 시드가 커져도 안 깨진다. */
+    private int seedWorkCount() {
+        return seedCsvReader.read("seed/works.csv").size();
+    }
 
     @Test
     @DisplayName("관리자가 지운 시드 곡은 로더 재실행(=재기동)으로 되살아나지 않는다")
     void deletedSeedWork_isNotResurrected() throws Exception {
+        int seedWorkCount = seedWorkCount();
         Tokens admin = loginAdmin();
         long workId = findWorkIdByTitle(admin, DELETED_TITLE);
 
         adminDelete(admin, "/api/admin/works/{id}", workId).andExpect(status().isNoContent());
-        assertThat(totalWorks(admin)).isEqualTo(SEED_WORK_COUNT - 1);
+        assertThat(totalWorks(admin)).isEqualTo(seedWorkCount - 1);
 
         runSeedLoader();
 
@@ -51,7 +59,7 @@ class SeedDeletionIntegrationTest extends AdminApiTestSupport {
                 .path("works").path("content").size())
                 .as("지운 시드 곡이 새 id 로 다시 들어오면 안 된다")
                 .isZero();
-        assertThat(totalWorks(admin)).isEqualTo(SEED_WORK_COUNT - 1);
+        assertThat(totalWorks(admin)).isEqualTo(seedWorkCount - 1);
     }
 
     @Test
@@ -62,7 +70,7 @@ class SeedDeletionIntegrationTest extends AdminApiTestSupport {
 
         runSeedLoader();
 
-        assertThat(totalWorks(admin)).isEqualTo(before).isEqualTo(SEED_WORK_COUNT);
+        assertThat(totalWorks(admin)).isEqualTo(before).isEqualTo(seedWorkCount());
     }
 
     private void runSeedLoader() throws Exception {

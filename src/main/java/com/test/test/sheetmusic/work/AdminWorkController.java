@@ -2,6 +2,7 @@ package com.test.test.sheetmusic.work;
 
 import com.test.test.common.dto.ApiResponse;
 import com.test.test.sheetmusic.common.AdminPageRequests;
+import com.test.test.sheetmusic.recommendation.dto.RecommendationHistoryDTO;
 import com.test.test.sheetmusic.work.dto.AdminWorkDetailDTO;
 import com.test.test.sheetmusic.work.dto.AdminWorkListDTO;
 import com.test.test.sheetmusic.work.dto.AliasOverlapDTO;
@@ -63,6 +64,12 @@ public class AdminWorkController {
     public ResponseEntity<ApiResponse<AdminWorkDetailDTO>> update(@PathVariable Long id,
                                                                   @Valid @RequestBody WorkSaveDTO request) {
         return ResponseEntity.ok(ApiResponse.success(adminWorkService.update(id, request)));
+    }
+
+    /** 바뀐 이력 전부 (02 §4-7-1) — 곡 상세는 최근 5줄만 싣는다. */
+    @GetMapping("/{workId}/recommendation-history")
+    public ResponseEntity<ApiResponse<RecommendationHistoryDTO>> recommendationHistory(@PathVariable Long workId) {
+        return ResponseEntity.ok(ApiResponse.success(adminWorkService.recommendationHistory(workId)));
     }
 
     /**

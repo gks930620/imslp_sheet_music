@@ -172,6 +172,22 @@ div#catlinks                            <- 카테고리 링크 (For piano 등)
 | - | `HEAD https://imslp.org/images/a/a8/Beethoven%2C_L.v._-_Piano_Sonata_14.pdf` | 200 이지만 **`Content-Type: text/html`** | 작품 페이지의 `/images/` 링크는 위키 핸들러로 라우팅되는 HTML 이지 PDF 가 아니다 |
 | - | `GET https://ks15.imslp.org/robots.txt` | 404 | 파일 호스트엔 robots 없음(본 도메인 robots 의 `/imglnks/` Disallow 는 imslp.org 경로 기준) |
 
+**2026-09-22 실측 보충 — 302 자체가 아니라 `Location` 의 모양이 게이트인지 파일인지를 가른다.**
+
+위 표(2번·2'번 행)는 "쿠키 2개(`redirectPassed=1; imslpdisclaimeraccepted=yes`)를 보내면 `Special:ImagefromIndex/{id}` 는
+**항상 200** 이고, 본문의 `span#sm_dl_wait[data-id]` 가 최종 파일 URL" 이라는 전제로 읽힐 수 있는데, **그 전제가 전부 맞지는 않는다는 것을
+2026-09-22 운영 로그로 확인했다.** 같은 쿠키 2개 조합으로도 `Special:ImagefromIndex/{id}` 가 **302 + `Location:
+https://s9.imslp.org/files/imglnks/...`** 를 바로 준 사례가 있었다. 이건 봇 게이트가 아니라 **대기 페이지(4번 행)를 생략한 정상 파일
+리다이렉트**다 — `Location` 의 모양이 원래 `span#sm_dl_wait[data-id]` 로 오던 값과 같은 패턴(`{서브도메인}.imslp.org` + `/files/...`)이기
+때문이다. 이때는 15초 대기 페이지 자체가 없으므로 **`Location` 이 곧 최종 파일 URL** 이고, 이어지는 파일 GET(5번 행)만 그대로 하면 된다.
+
+즉 3xx 응답을 봇 게이트로 볼지 정상 파일 리다이렉트로 볼지는 **"302 인가"가 아니라 "`Location` 이 `*.imslp.org` 서브도메인 +
+`/files/` 경로인가"** 로 가른다(본체 `imslp.org` 로의 302 나 `/friendlyredirect.html` 류는 여전히 게이트 — 1번·3번 행 그대로 유효하다).
+위 표의 관측(그 순간엔 매번 200 대기 페이지였던 것)을 지우지 않는 이유는 그때 관측은 그때대로 사실이기 때문이다 — 새로 확인된 것은
+"200 대기 페이지 / 302 즉시 리다이렉트" **둘 다 일어날 수 있다**는 것이다. 판별 규칙은 `HttpImslpClient.isFileHostRedirect()` 와
+그 규칙을 20건으로 고정한 `HttpImslpClientFileRedirectTest` 로 코드에 옮겼다(정정 배경은 `03_기술결정.md` §3 「파일 대기 값(15초) 판단」
+2026-09-22 정정 참고).
+
 ### 2-2. 크롤러 관점 요약
 
 ```

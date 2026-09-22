@@ -71,7 +71,13 @@ public final class CopyrightDTOs {
         }
     }
 
-    /** §5-6 추천 판본 지정 요청·응답. */
+    /**
+     * §5-6 추천 판본 지정 요청·응답 (2026-09-21 전면 개정 — 기획 06 §1-4·§3-1·§3-2·§3-3).
+     *
+     * <p>{@code reason}·{@code note} 는 일부러 <b>문자열</b>로 받는다(enum 타입이 아니다) — 모르는 값을
+     * Jackson 이 역직렬화 단계에서 튕기면 404(존재 확인)보다 먼저 400 이 나가 "검증 순서는 404 → 400" 계약이
+     * 깨진다. 그래서 존재를 먼저 확인한 뒤 서비스가 직접 파싱해 필드 오류로 돌려준다.
+     */
     @Getter
     @Setter
     @NoArgsConstructor
@@ -80,6 +86,15 @@ public final class CopyrightDTOs {
 
         @NotNull(message = "판본을 선택해 주세요")
         private Long editionId;
+
+        /** {@code RecommendationReason} 6개 중 하나 — 필수. 누락·모르는 값은 서비스가 400 field {@code reason}. */
+        private String reason;
+
+        /** {@code reason = OTHER} 면 필수, 아니면 선택. 공백만 있으면 서비스가 null 로 정규화한다. */
+        private String note;
+
+        /** 기본 false — {@code true} 면 지정과 동시에 검수를 끝낸다(§5-6-1 을 따로 부르지 않는다). */
+        private Boolean reviewed;
     }
 
     @Getter
@@ -91,10 +106,26 @@ public final class CopyrightDTOs {
         private Long previousEditionId;
         private Long editionId;
         private com.test.test.sheetmusic.work.WorkStatus workStatus;
+
+        /** 요청의 {@code reviewed} 가 그대로 반영된 결과 (2026-09-21 신설). */
+        private boolean recommendationReviewed;
+
         /**
          * 해당되는 경고가 <b>전부</b> 고정 순서로 온다. 없으면 빈 배열이고 <b>null 이 아니다</b> (02 §5-6, 2026-09-08).
          * 옛 단수 필드 {@code warning} 은 삭제했다 — 같은 뜻의 필드를 둘 두면 화면마다 다른 걸 읽는다.
+         * 2026-09-21 — 3종에서 6종으로, <b>지정 직전 상태</b>로 계산한다(§5-6-2 와 같은 함수).
          */
+        private java.util.List<com.test.test.sheetmusic.edition.RecommendWarning> warnings;
+    }
+
+    /** §5-6-2 바꾸기 전 경고 예고 (2026-09-21 신설) — §5-6 응답과 <b>같은 함수</b>로 계산한다. */
+    @Getter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class RecommendPreviewResult {
+        private Long workId;
+        private Long editionId;
         private java.util.List<com.test.test.sheetmusic.edition.RecommendWarning> warnings;
     }
 

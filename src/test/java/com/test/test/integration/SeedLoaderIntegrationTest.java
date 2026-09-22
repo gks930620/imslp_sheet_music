@@ -22,7 +22,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 시드 적재 — docs/설계/01_ERD.md §6, 03_기술결정.md §8.
  * {@code src/main/resources/seed/composers.csv, works.csv} 를 {@code SeedLoader}(ApplicationRunner, 빈 이름 seedLoader)
- * 가 기동 시 적재한다. 기획 03 표(작곡가 25·곡 50)와 1:1 이어야 하며, 멱등(재실행해도 행이 늘지 않음)이어야 한다.
+ * 가 기동 시 적재한다. <b>CSV 행 수와 1:1</b>이어야 하며, 멱등(재실행해도 행이 늘지 않음)이어야 한다.
+ *
+ * <p>기대값은 CSV 를 직접 세어 만든다({@code seedComposerCount()}·{@code seedWorkCount()},
+ * {@code SheetMusicFixtureSupport}) — 곡을 큐레이션해서 시드가 커져도 이 파일은 다시 손댈 필요가 없다.
+ * 잠그는 것은 "지금 몇 곡인가"가 아니라 "로더가 CSV 를 빠짐없이·중복 없이 실었는가"다.
  */
 class SeedLoaderIntegrationTest extends SheetMusicFixtureSupport {
 
@@ -33,20 +37,22 @@ class SeedLoaderIntegrationTest extends SheetMusicFixtureSupport {
     private ApplicationContext applicationContext;
 
     @Test
-    @DisplayName("기동 후 작곡가 25명(무소르그스키 제외), 곡 50")
+    @DisplayName("기동 후 작곡가·곡 수가 CSV 행 수와 정확히 같다 (무소륵스키 포함)")
     void seed_counts() throws Exception {
+        int expectedComposers = seedComposerCount();
+        int expectedWorks = seedWorkCount();
+
         JsonNode composers = getJson("/api/composers").path("data");
-        assertThat(composers.path("total").asInt()).isEqualTo(25);
+        assertThat(composers.path("total").asInt()).isEqualTo(expectedComposers);
         int workSum = 0;
         for (JsonNode c : composers.path("composers")) {
             workSum += c.path("workCount").asInt();
-            assertThat(c.path("nameOriginal").asText()).isNotEqualTo("Mussorgsky, Modest");
         }
-        assertThat(workSum).isEqualTo(50);
+        assertThat(workSum).isEqualTo(expectedWorks);
 
         Tokens admin = loginAdmin();
         assertThat(getJsonAsAdmin(admin, "/api/admin/works").path("data").path("unfilteredTotal").asInt())
-                .isEqualTo(50);
+                .isEqualTo(expectedWorks);
     }
 
     @Test
@@ -136,12 +142,12 @@ class SeedLoaderIntegrationTest extends SheetMusicFixtureSupport {
         loader.run(new DefaultApplicationArguments());
 
         JsonNode composers = getJson("/api/composers").path("data");
-        assertThat(composers.path("total").asInt()).isEqualTo(totalBefore).isEqualTo(25);
+        assertThat(composers.path("total").asInt()).isEqualTo(totalBefore).isEqualTo(seedComposerCount());
         int workSum = 0;
         for (JsonNode c : composers.path("composers")) {
             workSum += c.path("workCount").asInt();
         }
-        assertThat(workSum).isEqualTo(50);
+        assertThat(workSum).isEqualTo(seedWorkCount());
         assertThat(getJson("/api/works/{id}", moonlight).path("data").path("aliases").size()).isEqualTo(aliasesBefore);
         assertThat(searchWorks("월광")).hasSize(1);
     }

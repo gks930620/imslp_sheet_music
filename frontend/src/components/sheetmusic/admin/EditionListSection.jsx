@@ -5,20 +5,14 @@ import { EmptyState } from "../../common/EmptyState.jsx";
 import { InlineAlert } from "../../common/InlineAlert.jsx";
 import { CopyrightBadge } from "../CopyrightBadge.jsx";
 import { EditionFormModal } from "./EditionFormModal.jsx";
+import { RecommendChangePanel } from "./RecommendChangePanel.jsx";
+import { RecommendationReasonBox } from "./RecommendationReasonBox.jsx";
 import { callApi } from "../../../lib/http.js";
-import {
-  formatCount,
-  formatEditionKind,
-  formatEditionScope,
-  formatFileSizeCompact,
-  formatRecommendWarning,
-} from "../../../lib/format.js";
+import { formatCount, formatEditionKind, formatEditionScope, formatFileSizeCompact } from "../../../lib/format.js";
 
 const POLL_INTERVAL_MS = 3_000;
 const FETCHING_STATUSES = ["QUEUED", "FETCHING"];
 const ACTION_ERROR = "처리하지 못했어요. 잠시 후 다시 시도해 주세요";
-/** 02 §5-6 — 경고는 목록이다. 겹치면 전부 보여준다(고정 순서) */
-const WARNING_ORDER = ["NOT_DOWNLOADABLE", "ARRANGEMENT", "PARTIAL_SCOPE"];
 
 function editionLabel(edition) {
   return [formatEditionKind(edition?.kind), edition?.publisher].filter(Boolean).join(" · ");
@@ -38,6 +32,7 @@ export function EditionListSection({
   recommendedEditionId = null,
   candidateEditionId = null,
   recommendationReviewed = false,
+  recommendation,
   composer = null,
   onChanged,
   onToast,
@@ -47,6 +42,7 @@ export function EditionListSection({
   const [rowAlerts, setRowAlerts] = useState({});
   const [fetchingIds, setFetchingIds] = useState([]);
   const [activeCrawlJob, setActiveCrawlJob] = useState(null);
+  const [openPanelEditionId, setOpenPanelEditionId] = useState(null);
   const timersRef = useRef({});
   const pollRef = useRef(null);
 
@@ -117,27 +113,23 @@ export function EditionListSection({
     };
   }, [hasFetchingRow]);
 
-  const recommend = async (edition) => {
-    setRowAlert(edition.id, null);
-    try {
-      const result = await callApi(`/api/admin/works/${workId}/recommended-edition`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ editionId: edition.id }),
-      });
-      const data = result.data ?? {};
-      const previous = editions.find((item) => item.id === data.previousEditionId);
-      onToast?.(
-        previous
-          ? `추천 판본을 ${editionLabel(previous)}에서 ${editionLabel(edition)}로 바꿨어요`
-          : "추천 판본으로 지정했어요",
-      );
-      const codes = WARNING_ORDER.filter((code) => (data.warnings ?? []).includes(code));
-      if (codes.length > 0) setRowAlert(edition.id, { kind: "warnings", codes });
-      onChanged?.();
-    } catch {
-      setRowAlert(edition.id, { kind: "action-failed" });
-    }
+  /**
+   * 02 §5-6 — 2026-09-21부터 "추천으로 지정" 은 즉시 PUT 하지 않는다. 그 행 아래 A-3 패널을 토글하고,
+   * 실제 지정·경고 읽기·사유·Toast 는 패널(RecommendChangePanel)이 맡는다(화면정의 06 A-2·A-3).
+   */
+  const togglePanel = (edition) => {
+    setOpenPanelEditionId((prev) => (prev === edition.id ? null : edition.id));
+  };
+
+  const recommendDone = (edition) => (result) => {
+    setOpenPanelEditionId(null);
+    const previous = editions.find((item) => item.id === result?.previousEditionId);
+    onToast?.(
+      previous
+        ? `추천 판본을 ${editionLabel(previous)}에서 ${editionLabel(edition)}로 바꿨어요`
+        : "추천 판본으로 지정했어요",
+    );
+    onChanged?.();
   };
 
   const remove = async (edition) => {
@@ -161,25 +153,6 @@ export function EditionListSection({
       if (error?.status === 409) return; // 이미 받는 중 — 그대로 스피너 유지
       setFetchingIds((prev) => prev.filter((id) => id !== edition.id));
       setRowAlert(edition.id, { kind: "fetch-error", message: error?.message ?? ACTION_ERROR });
-    }
-  };
-
-  /**
-   * 02 §5-6-1 — 추천 판본 확인함. 확인은 "그 판본" 이 아니라 "지금 추천" 에 붙는 상태라 곡 단위 API 다.
-   * 추천이 바뀌면 서버가 다시 false 로 만든다(§5-6 · §5-11).
-   */
-  const review = async (reviewed) => {
-    setRowAlert(recommendedEditionId, null);
-    try {
-      await callApi(`/api/admin/works/${workId}/recommended-edition/review`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewed }),
-      });
-      onToast?.(reviewed ? "추천 판본을 확인했어요" : "확인을 해제했어요");
-      onChanged?.();
-    } catch {
-      setRowAlert(recommendedEditionId, { kind: "action-failed" });
     }
   };
 
@@ -211,6 +184,18 @@ export function EditionListSection({
 
       {needsRecommendation ? (
         <InlineAlert variant="warning">추천 판본이 없어요 — 사용자에게는 &apos;준비 중&apos;으로 보여요</InlineAlert>
+      ) : null}
+
+      {recommendation !== undefined ? (
+        <RecommendationReasonBox
+          workId={workId}
+          hasRecommendation={Boolean(recommended)}
+          reviewed={recommendationReviewed}
+          recommendation={recommendation}
+          recommendedEdition={recommended}
+          onChanged={onChanged}
+          onToast={onToast}
+        />
       ) : null}
 
       {needsJudgement ? (
@@ -308,36 +293,14 @@ export function EditionListSection({
                     </button>
                   ) : null}
 
-                  {isRecommended ? (
-                    recommendationReviewed ? (
-                      <>
-                        <span className="status-badge badge-reviewed">
-                          <span className="material-icons" aria-hidden="true">
-                            verified
-                          </span>
-                          확인함
-                        </span>
-                        <button className="btn btn-text" type="button" onClick={() => review(false)}>
-                          확인 해제
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button className="btn btn-outline" type="button" onClick={() => review(true)}>
-                          확인함
-                        </button>
-                        <span className="form-help">미리보기를 열어 피아노 악보가 맞는지 확인해 주세요</span>
-                      </>
-                    )
-                  ) : null}
-
                   {!isRecommended ? (
                     <>
                       <button
                         className={isCandidate ? "btn btn-primary" : "btn btn-text"}
                         type="button"
                         disabled={!edition.hasFile}
-                        onClick={() => recommend(edition)}
+                        aria-expanded={edition.hasFile ? openPanelEditionId === edition.id : undefined}
+                        onClick={() => togglePanel(edition)}
                       >
                         {isCandidate ? "이 후보를 추천으로 지정" : "추천으로 지정"}
                       </button>
@@ -368,13 +331,6 @@ export function EditionListSection({
                   </p>
                 ) : null}
 
-                {alert?.kind === "warnings"
-                  ? alert.codes.map((code) => (
-                      <InlineAlert key={code} variant="warning">
-                        {formatRecommendWarning(code, edition)}
-                      </InlineAlert>
-                    ))
-                  : null}
                 {alert?.kind === "action-failed" ? <InlineAlert variant="danger">{ACTION_ERROR}</InlineAlert> : null}
                 {alert?.kind === "fetch-error" ? <InlineAlert variant="danger">{alert.message}</InlineAlert> : null}
                 {alert?.kind === "fetch-failed" ? (
@@ -385,6 +341,17 @@ export function EditionListSection({
                     </button>
                     {alert.detail ? ` ${alert.detail}` : null}
                   </InlineAlert>
+                ) : null}
+
+                {openPanelEditionId === edition.id ? (
+                  <RecommendChangePanel
+                    workId={workId}
+                    edition={edition}
+                    currentEdition={recommended}
+                    currentReason={recommendation?.current ?? null}
+                    onCancel={() => setOpenPanelEditionId(null)}
+                    onDone={recommendDone(edition)}
+                  />
                 ) : null}
               </div>
             );

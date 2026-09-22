@@ -20,6 +20,9 @@ import com.test.test.sheetmusic.edition.repository.EditionRepository;
 import com.test.test.sheetmusic.edition.repository.WorkEditionCount;
 import com.test.test.sheetmusic.member.repository.UserWorkDownloadRepository;
 import com.test.test.sheetmusic.member.repository.WorkFavoriteRepository;
+import com.test.test.sheetmusic.recommendation.RecommendationLogService;
+import com.test.test.sheetmusic.recommendation.RecommendationSource;
+import com.test.test.sheetmusic.recommendation.dto.RecommendationHistoryDTO;
 import com.test.test.sheetmusic.work.dto.AdminWorkDetailDTO;
 import com.test.test.sheetmusic.work.dto.AdminWorkListDTO;
 import com.test.test.sheetmusic.work.dto.AdminWorkSummaryDTO;
@@ -59,6 +62,7 @@ public class AdminWorkService {
     private final CrawlItemRepository crawlItemRepository;
     private final AdminEditionService adminEditionService;
     private final EditionDtoAssembler editionDtoAssembler;
+    private final RecommendationLogService recommendationLogService;
 
     // ===== §4-6 목록 =====
 
@@ -84,9 +88,11 @@ public class AdminWorkService {
 
         List<Long> ids = page.getContent().stream().map(WorkEntity::getId).toList();
         Map<Long, Long> editionCounts = countEditions(ids);
+        Map<Long, RecommendationSource> recommendationSources = recommendationLogService.latestAssignedSourceByWork(ids);
 
         List<AdminWorkSummaryDTO> content = new ArrayList<>();
         for (WorkEntity work : page.getContent()) {
+            boolean hasRecommended = work.getRecommendedEdition() != null;
             content.add(AdminWorkSummaryDTO.builder()
                     .id(work.getId())
                     .titleKo(work.getTitleKo())
@@ -96,8 +102,10 @@ public class AdminWorkService {
                             .map(WorkCatalogNumberEntity::getCatalogValue).toList())
                     .level(work.getLevel())
                     .editionCount(editionCounts.getOrDefault(work.getId(), 0L).intValue())
-                    .hasRecommended(work.getRecommendedEdition() != null)
+                    .hasRecommended(hasRecommended)
                     .recommendationReviewed(work.isRecommendedEditionReviewed())
+                    // 추천이 없으면 항상 null(02 §4-6) — 기록이 있어도 추천 자체가 없으면 의미가 없다.
+                    .recommendationSource(hasRecommended ? recommendationSources.get(work.getId()) : null)
                     .status(work.status())
                     .needsWork(work.needsWork())
                     .hidden(work.isHidden())
@@ -171,6 +179,14 @@ public class AdminWorkService {
         return toDetail(work);
     }
 
+    // ===== §4-7-1 바뀐 이력 전부 =====
+
+    /** 곡 편집 폼을 건드리지 않는 자기 주소 읽기(§4-7 은 5줄만 싣는다) — 이력만 다시 받는다. */
+    public RecommendationHistoryDTO recommendationHistory(Long workId) {
+        findOrThrow(workId);
+        return recommendationLogService.historyFor(workId);
+    }
+
     // ===== §5-6-1 추천 판본 확인함 =====
 
     /**
@@ -206,6 +222,8 @@ public class AdminWorkService {
         downloadLogRepository.deleteByWorkId(id);
         workFavoriteRepository.deleteByWorkId(id);
         userWorkDownloadRepository.deleteByWorkId(id);
+        // 곡이 없으면 설명할 대상이 없다 — work_id 가 NOT NULL 이라 가리킬 곳도 없다(01_ERD §7·§3-13).
+        recommendationLogService.deleteByWorkId(id);
         crawlItemRepository.detachWork(id);
         workRepository.delete(work);
     }
@@ -278,6 +296,7 @@ public class AdminWorkService {
                 .recommendedEditionId(recommendedId)
                 .candidateEditionId(candidateId)
                 .recommendationReviewed(work.isRecommendedEditionReviewed())
+                .recommendation(recommendationLogService.summaryFor(work.getId()))
                 .downloadCount(work.getDownloadCount())
                 .hasDownloadHistory(downloadLogRepository.existsByWorkId(work.getId()))
                 .editions(editionDtos)
