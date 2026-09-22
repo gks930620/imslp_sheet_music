@@ -19,6 +19,7 @@ composer 1 ──< work 1 ──< work_alias
                   │  0..1 ─── edition (work.recommended_edition_id)   ← 곡당 추천 판본 1개
                   └──< download_log
 crawl_job 1 ──< crawl_item >── 0..1 work
+work      1 ──< work_recommendation_log >── 0..1 edition   ← 추천 근거·이력 (2026-09-21, §3-13)
 users (기존) 1 ──< work_favorite      >── work          ← 즐겨찾기 (2026-09-20, §3-11)
 users (기존) 1 ──< user_work_download >── work          ← 받은 악보 (곡 단위 한 줄, §3-12)
                               └──────── 0..1 edition (last_edition_id)
@@ -26,7 +27,7 @@ users (기존)  — user_roles 에 'ADMIN' 역할 추가(시드)
 files (기존)  — ref_type 에 EDITION 추가, file_usage 는 ATTACHMENT(PDF)/THUMBNAIL(미리보기) 재사용
 ```
 
-- 신규 테이블 11개: `composer`, `composer_alias`, `work`, `work_alias`, `work_catalog_number`, `edition`, `download_log`, `crawl_job`, `crawl_item`, **`work_favorite`**, **`user_work_download`**
+- 신규 테이블 12개: `composer`, `composer_alias`, `work`, `work_alias`, `work_catalog_number`, `edition`, `download_log`, `crawl_job`, `crawl_item`, **`work_favorite`**, **`user_work_download`**, **`work_recommendation_log`**
 - 기존 테이블 변경 2개: `files`(enum 값 추가만, 컬럼 변경 없음), `user_roles`(시드에 ADMIN 1건)
 - 커뮤니티·채팅 테이블은 손대지 않는다(01 §9 8-2).
 
@@ -336,6 +337,74 @@ IMSLP 의 `div.we` 블록 하나에 파일이 여러 개면 파일마다 행을 
 - **과거 기록은 소급하지 않는다** — 이 표는 기능이 들어온 뒤부터 쌓인다(기획 05 §3-1, 인수 조건 8-D 4). 그래서 마이그레이션에 백필이 없다.
 - 숨김 곡은 목록·숫자에서만 빠지고 행은 남는다. 곡이 삭제되면 함께 사라진다(§7).
 
+### 3-13. `work_recommendation_log` — 추천이 정해진 순간의 기록 (2026-09-21 신설, 기획 06 §1·§5)
+
+**"고른 이유" 와 "바뀐 이력" 은 같은 표다.** 맨 위 한 줄이 지금의 "고른 이유"이고, 쌓인 전체가 "바뀐 이력"이다(기획 06 §1-5).
+두 표로 나누면 둘이 어긋나는 날이 오고, 그러면 화면이 어느 쪽을 믿어야 하는지 아무도 답하지 못한다.
+
+**이 표는 append-only 다.** 어떤 경로도 기존 행을 고치거나 지우지 않는다(곡 삭제 §7 · 판본 삭제의 참조 끊기 제외).
+추천이 정해지는 순간은 셋뿐이고(기획 06 §1-2), **셋 전부가 한 줄을 만든다**: 자동 지정 · 관리자 지정 · 추천이 빠짐.
+
+| 컬럼 | 타입 | NULL | 설명 |
+|---|---|---|---|
+| id | BIGINT PK | N | |
+| work_id | BIGINT FK→work | N | 곡 삭제 시 함께 삭제(§7) |
+| decided_at | TIMESTAMP(6) | N | **그 판단을 내린 시각이자 정렬 키.** 화면의 `2026-09-20 11:02`(02 §4-7-1) |
+| source | VARCHAR(30) | N | enum `RecommendationSource`: `AUTO`(시스템) / `ADMIN`(사람). **`@JdbcTypeCode(VARCHAR)` 필수**(§9-1) |
+| action | VARCHAR(30) | N | enum `RecommendationAction`: `ASSIGNED`(추천이 정해짐) / `CLEARED`(추천이 빠짐). 〃 |
+| decided_by_user_id | BIGINT FK→users | Y | `source=ADMIN` 일 때만. 토큰 주체로만 채운다(컨벤션 §4-1) |
+| decided_by_nickname | VARCHAR(100) | Y | **그때의 닉네임 스냅샷.** 화면이 쓰는 이름(화면정의 06 A-1 "관리자 이름 표기" — 로그인 아이디는 화면에 흘리지 않는다). 닉네임이 비어 있었으면 NULL(화면 `관리자`) |
+| edition_id | BIGINT FK→edition | Y | 이 순간 추천이 된 판본. `action=CLEARED` 면 NULL. **판본이 지워지면 NULL**(§7) |
+| edition_kind | VARCHAR(30) | Y | **스냅샷** — enum `EditionKind`. 〃 `@JdbcTypeCode(VARCHAR)` |
+| edition_scope | VARCHAR(30) | Y | 스냅샷 — enum `EditionScope`. 〃 |
+| edition_movement_number | INT | Y | 스냅샷 |
+| edition_publisher | VARCHAR(300) | Y | 스냅샷 |
+| edition_editor | VARCHAR(200) | Y | 스냅샷 |
+| edition_publish_year | INT | Y | 스냅샷 |
+| previous_edition_id | BIGINT FK→edition | Y | 직전 추천. NULL = **처음 지정**. 판본이 지워지면 NULL(§7) |
+| previous_kind / previous_scope / previous_movement_number / previous_publisher / previous_editor / previous_publish_year | 위와 같은 타입 | Y | 직전 추천의 **스냅샷** (같은 6개) |
+| auto_rule | VARCHAR(30) | Y | `source=AUTO` 일 때만. enum `RecommendationAutoRule`: `MOST_IMSLP_DOWNLOADS`. 〃 `@JdbcTypeCode(VARCHAR)` |
+| auto_imslp_download_count | INT | Y | **그때의** IMSLP 다운로드 수. **NULL = "IMSLP 다운로드 수가 적혀 있지 않은 판본"**(화면정의 06 A-1 셋째 줄 둘째 갈래) |
+| auto_candidate_count | INT | Y | **그때의** 후보 수. `1` 이면 화면이 "고를 수 있는 판본이 이것 하나뿐이었어요"(8-A 3) |
+| auto_rank | INT | Y | **그때의** 순위. 지금 규칙은 언제나 1이지만 계약이 값으로 말한다(8-A 2 가 "후보 수와 순위"를 함께 요구한다) |
+| reason | VARCHAR(30) | Y | `source=ADMIN` + `action=ASSIGNED` 일 때만. enum `RecommendationReason` 6개(§4). 〃 `@JdbcTypeCode(VARCHAR)` |
+| note | VARCHAR(300) | Y | 메모. `reason=OTHER` 면 필수(검증은 API 계층 — 02 §5-6) |
+| cleared_reason | VARCHAR(30) | Y | `action=CLEARED` 일 때만. enum `RecommendationClearedReason`: `EDITION_DELETED` / `EDITION_FILE_REMOVED`. 〃 |
+
+인덱스: `idx_work_recommendation_log_work(work_id, decided_at, id)` — 곡별 최신순 조회 하나뿐이다. 다른 축으로 읽는 화면이 없다.
+
+**불변식 (서비스가 지킨다 — DB 제약으로 표현할 수 없는 조합 규칙)**
+
+| 조건 | 반드시 |
+|---|---|
+| `action = ASSIGNED` | `edition_id != NULL`(기록 당시) · `cleared_reason = NULL` |
+| `action = CLEARED` | `edition_id = NULL` · `cleared_reason != NULL` · `reason = NULL` (삭제에는 사유를 묻지 않는다 — 화면정의 06 A-2) |
+| `source = AUTO` | `action = ASSIGNED` · `auto_rule != NULL` · `reason`·`note`·`decided_by_*` 전부 NULL |
+| `source = ADMIN` | `decided_by_user_id != NULL` · `auto_* ` 전부 NULL |
+| `source = ADMIN` + `ASSIGNED` | `reason != NULL`, `reason = OTHER` 면 `note != NULL` |
+
+**왜 판본 표기를 양쪽 다 스냅샷하나.** `user_work_download`(§3-12)와 같은 이유다 — 화면이 이력 한 줄에
+`{이전 판본} → {새 판본}` 을 그리는데(화면정의 06 A-1 "바뀐 이력"), **추천 판본을 삭제해 추천이 빠진 곡**에서는
+그 줄의 왼쪽이 곧 지워진 판본이다. 스냅샷이 없으면 8-B 7 이 요구하는 `추천을 뺐어요` 줄이 `? → 추천 없음` 이 되어
+"어제까지 추천이 있었는데 왜 없지?" 라는 바로 그 질문에 답하지 못한다. 또 출판사·편집자·연도는 관리자가 고칠 수 있는
+값이라, 살아 있는 판본에서 지금 읽으면 **그때의 판단이 아니라 오늘의 값**이 된다(기획 06 §1-3 과 같은 원칙).
+
+**왜 `previous` 를 "앞 줄에서 읽기" 로 대신하지 않나.** 줄 N 의 이전 추천은 대개 줄 N-1 의 판본이지만,
+**이력이 0줄인데 추천이 있는 곡**(실데이터 42곡 — §5 소급 없음)에서는 앞 줄이 없다. 그 곡을 관리자가 처음 다시 지정할 때
+"이전 추천: Peters / Köhler / 1880" 을 말할 근거가 이 컬럼 말고 없다.
+
+**왜 `edition` 쪽도 6필드 대칭인가.** 이력 한 줄의 두 판본은 화면에서 같은 함수로 그려진다. 한쪽만 3필드면
+화면이 "왼쪽과 오른쪽이 다른 모양"이라는 것을 알아야 하고, designer 가 이력 줄에 종류를 더하는 순간 계약이 또 바뀐다.
+컬럼 3개가 그 비용보다 싸다(이 표는 append-only 라 갱신 경로가 없고, 42곡 규모에서 행 수도 작다).
+
+**`created_at`/`updated_at` 을 두지 않는다** — §1 공통 규칙의 명시적 예외다. 이 표는 사건 기록이라
+행 생성 = 사건 발생이고, `decided_at` 과 `created_at` 을 둘 다 두면 "화면이 보여주는 시각이 어느 쪽인가" 를
+매번 다시 판단하게 된다. 갱신 경로가 없으므로 `updated_at` 은 뜻 자체가 없다.
+
+**백필이 없다 (기획 06 §5 확정).** 이 표는 기능이 들어온 뒤부터 쌓인다. 실데이터 42곡은 **행이 0개인 상태가 정상**이고,
+그 상태가 화면의 "기록이 없어요"(화면정의 06 A-1 (C))다. 지금 데이터로 다시 계산해 채우면 그건 그때의 판단이 아니라
+오늘 다시 낸 답이고, 무엇보다 자동인지 사람인지 구분할 수 없다.
+
 ---
 
 ## 4. 상태값(enum) 총정리
@@ -358,6 +427,11 @@ IMSLP 의 `div.we` 블록 하나에 파일이 여러 개면 파일마다 행을 
 | `CrawlItemMode` | CREATE / ATTACH / REFRESH / SKIP | crawl_item |
 | `CrawlItemStatus` | PENDING / PROCESSING / SUCCESS / FAILED / SKIPPED / HIDDEN | crawl_item |
 | `CrawlFailReason` | PAGE_NOT_FOUND / NO_PDF_EDITION / FILE_DOWNLOAD_FAILED / IMSLP_UNAVAILABLE / INTERRUPTED / INTERNAL_ERROR | crawl_item |
+| `RecommendationSource` (2026-09-21 신설) | AUTO(시스템이 규칙으로) / ADMIN(사람이 손으로) | work_recommendation_log.source, 02 §4-6 `recommendationSource` |
+| `RecommendationAction` (2026-09-21 신설) | ASSIGNED(추천이 정해짐) / CLEARED(추천이 빠짐) | work_recommendation_log.action |
+| `RecommendationAutoRule` (2026-09-21 신설) | MOST_IMSLP_DOWNLOADS — "전체 악보 · 전곡 · 파일 있는 판본 중 IMSLP 다운로드가 가장 많은 것". **규칙이 바뀌면 상수를 더하고 옛 줄은 옛 상수를 유지한다**(그게 그때의 판단이다 — 기획 06 §4-2) | work_recommendation_log.auto_rule |
+| `RecommendationReason` (2026-09-21 신설) | NOT_THIS_WORK / BETTER_READABILITY / BETTER_FOR_LEARNERS / PREVIOUS_UNAVAILABLE / COVERS_WHOLE_WORK / OTHER — **선언 순서가 곧 화면 나열 순서**(화면정의 06 A-3 ③). 문구는 서버가 갖지 않는다(§4 아래 주석) | work_recommendation_log.reason, 02 §5-6 요청 |
+| `RecommendationClearedReason` (2026-09-21 신설) | EDITION_DELETED(추천 판본을 삭제) / EDITION_FILE_REMOVED(추천 판본에서 파일을 뗌 — 02 §5-3 이 이미 하던 해제) | work_recommendation_log.cleared_reason |
 | `RefType` (기존, 값 추가) | COMMUNITY / USER / **EDITION** | files.ref_type |
 | `Usage` (기존, 변경 없음) | THUMBNAIL(=미리보기 PNG) / IMAGES / ATTACHMENT(=악보 PDF) | files.file_usage |
 
@@ -483,10 +557,10 @@ else                                                        → UNKNOWN
 | 동작 | 순서 |
 |---|---|
 | 작곡가 삭제 | 곡 1개라도 있으면 거부(400). 없으면 별칭 → 작곡가 |
-| 곡 삭제 | `recommended_edition_id = NULL` → 판본마다(§아래 판본 삭제) → download_log(work) → **work_favorite(work) · user_work_download(work) 삭제**(2026-09-20 — 곡이 없으면 선반에 남길 것도 없다) → 별칭·작품번호(cascade) → crawl_item.work_id NULL 처리 → 곡 |
-| 판본 삭제 | 추천이면 곡의 `recommended_edition_id = NULL` → **download_log(edition) 의 `edition_id` 를 NULL 로**(행은 남긴다 — §3-7) → **user_work_download(edition) 의 `last_edition_id` 를 NULL 로**(스냅샷 5개는 남긴다 — §3-12, 그래야 "그때 받은 악보는 지금 받을 수 없어요" 아래에 무엇을 못 주는지 적을 수 있다) → `files` 행(pdf, preview) 삭제 + 바이트 삭제는 **커밋 후**(기존 `FileService.registerBytesDeletionAfterCommit` 패턴) → 판본 |
+| 곡 삭제 | `recommended_edition_id = NULL` → 판본마다(§아래 판본 삭제) → download_log(work) → **work_favorite(work) · user_work_download(work) 삭제**(2026-09-20 — 곡이 없으면 선반에 남길 것도 없다) → **work_recommendation_log(work) 삭제**(2026-09-21 — 곡이 없으면 설명할 대상이 없다. `work_id` 가 NOT NULL 이라 가리킬 곳도 없다) → 별칭·작품번호(cascade) → crawl_item.work_id NULL 처리 → 곡 |
+| 판본 삭제 | 추천이면 **`work_recommendation_log` 에 CLEARED 한 줄을 먼저 쌓고**(`cleared_reason = EDITION_DELETED`, previous 스냅샷 = 지워질 판본 — §3-13) 곡의 `recommended_edition_id = NULL` → **`work_recommendation_log` 의 `edition_id`·`previous_edition_id` 를 NULL 로**(행과 스냅샷 6개는 남긴다 — 2026-09-21) → **download_log(edition) 의 `edition_id` 를 NULL 로**(행은 남긴다 — §3-7) → **user_work_download(edition) 의 `last_edition_id` 를 NULL 로**(스냅샷 5개는 남긴다 — §3-12, 그래야 "그때 받은 악보는 지금 받을 수 없어요" 아래에 무엇을 못 주는지 적을 수 있다) → `files` 행(pdf, preview) 삭제 + 바이트 삭제는 **커밋 후**(기존 `FileService.registerBytesDeletionAfterCommit` 패턴) → 판본 |
 | 파일 교체 | 새 files 행 연결 후 옛 files 행 삭제(바이트는 커밋 후) |
-| 추천 지정 | 대상 판본이 그 곡의 것이고 `pdf_file_id IS NOT NULL` 일 때만. 이전 추천은 자동 해제(컬럼 하나라 자연히) |
+| 추천 지정 | 대상 판본이 그 곡의 것이고 `pdf_file_id IS NOT NULL` 일 때만. 이전 추천은 자동 해제(컬럼 하나라 자연히). **2026-09-21 — 같은 트랜잭션에서 `work_recommendation_log` 에 ASSIGNED 한 줄을 쌓는다**(자동 지정·관리자 지정 둘 다). 추천이 실제로 바뀌지 않으면(같은 판본을 다시 지정) 줄도 쌓지 않는다 — 02 §5-6 |
 | 다운로드 | 파일 Resource 확보 성공 후 짧은 트랜잭션에서 `edition.download_count+1`, `work.download_count+1`, `download_log` INSERT(원자적 UPDATE 문). 실패(파일 없음)면 아무것도 올리지 않는다. **2026-09-20 — 그 요청에 로그인 주체가 있으면 같은 트랜잭션에서 `user_work_download` 를 upsert 한다**(§3-12). 비로그인이면 여기까지가 전부다(집계만, 기획 05 §3-1). `HEAD` 는 이 트랜잭션 자체를 열지 않는다(02 §3-4) |
 | 수집 upsert | `imslp_url` 로 곡 조회 → 없으면 생성(CREATE), 있으면 판본만 붙임(ATTACH/REFRESH). 판본은 `imslp_file_id` 로 조회 → 있으면 메타만 갱신(파일·판정·메모는 보존), 없으면 생성. **갱신 범위·라이선스 강등 회수는 02 §6-12** |
 | 수집 판본 조회 | `imslp_file_id` 는 전역 UNIQUE 라 조회도 전역이다. 찾은 판본의 `work_id` 가 **지금 수집 중인 곡이 아니면** 그 판본은 건드리지 않고 건너뛴다(경고 로그) — 다른 곡의 판본을 조용히 갱신하거나 곡 사이를 옮겨 다니면 판본 수 집계와 추천이 어긋난다 (2026-09-07 추가) |
@@ -532,6 +606,9 @@ else                                                        → UNKNOWN
 담는 목록이라, 실행할 것이 없는 변경을 적으면 표를 볼 때마다 매번 "이건 했나?" 를 다시 판단하게 된다 —
 표의 모든 줄이 할 일이어야 표가 쓸모 있다. (기록만 남기면 되는 문장은 이 문단이 대신한다.)
 
+
+**2026-09-21 — 추천 근거·이력(§3-13)도 표에 넣지 않는다.** `work_recommendation_log` 는 **새 테이블 하나뿐**이고 기존 테이블의 컬럼이 **한 개도 바뀌지 않는다**(순수 추가형 — `ddl-auto: update` 가 그대로 만든다). 백필도 없다(기획 06 §5: 실데이터 42곡은 **행 0개가 정상**이고 그 상태가 화면의 "기록이 없어요"다).
+다만 이 표의 **enum 컬럼 9개**(`source`·`action`·`auto_rule`·`reason`·`cleared_reason`·`edition_kind`·`edition_scope`·`previous_kind`·`previous_scope`)에 **`@JdbcTypeCode(SqlTypes.VARCHAR)` 를 빠뜨리면 §9-1 로 없앤 네이티브 `ENUM` 컬럼이 아홉 개 되살아난다** — 그러면 다음에 `RecommendationReason` 에 상수를 하나 더할 때(기획 06 미결 6-2 가 "42곡을 훑어 본 뒤 라벨 표를 고칠 수 있다"고 열어 둔 바로 그 일) **서버가 기동하지 못한다.** 회귀 가드는 이미 있다: `SchemaEnumColumnTypeIntegrationTest`(생성 스키마에 `DATA_TYPE = 'ENUM'` 인 컬럼이 0개).
 ### 9-1. enum 컬럼 → VARCHAR 고정 (2026-09-08)
 
 **무엇을 바꾸나.** 우리는 모든 상태값을 `@Enumerated(EnumType.STRING)` 으로 쓰는데, Hibernate 6 은 H2·MySQL 에서

@@ -13,8 +13,9 @@ import { showToast } from "../../components/common/Toast.jsx";
 import { useApiResource } from "../../hooks/useApiResource.js";
 import { useSection, useSectionPath } from "../../hooks/useSection.js";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle.js";
+import { DOWNLOADING_LABEL, useDownloadStart } from "../../hooks/useDownloadStart.js";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { authFetch, callApi, callPublicApi } from "../../lib/http.js";
+import { callApi, callPublicApi } from "../../lib/http.js";
 import { formatEditionKind, formatEditionScope, formatFileSizeCompact } from "../../lib/format.js";
 import { findSectionByCode, linkSection } from "../../lib/sections.js";
 import { LOGIN_REASON, loginHref, peekLoginIntent, saveLoginIntent, takeLoginIntent } from "../../lib/loginIntent.js";
@@ -52,7 +53,6 @@ export function WorkDetailPage() {
   const detail = useApiResource(() => callPublicApi(`/api/works/${id}`).then((result) => result.data), { deps: [id] });
   const [expandedOverride, setExpandedOverride] = useState(null);
   const [lightbox, setLightbox] = useState(null);
-  const [downloadCheck, setDownloadCheck] = useState("idle"); // "idle" | "checking" | "failed"
   const othersRef = useRef(null);
   // null = 서버가 준 값 그대로. 누르면(낙관) 그 값이 이긴다 — 02 §3-3 favorited 는 곡 상세 응답에 함께 온다(09 §6 S5).
   // 어느 곡의 값인지 함께 들고 있는다: "같은 작곡가의 다른 곡" 으로 옮기면 화면은 그대로고 :id 만 바뀐다
@@ -91,7 +91,7 @@ export function WorkDetailPage() {
           return;
         }
         setFavoriteOverride({ id, value: !next }); // 누르기 전 상태로 되돌린다. 화면 이동 없음(8-A 7)
-        showToast(FAVORITE_SAVE_FAILED);
+        showToast(FAVORITE_SAVE_FAILED, { variant: "danger" });
       })
       .finally(() => {
         favoriteBusy.current = false;
@@ -119,7 +119,7 @@ export function WorkDetailPage() {
       })
       .catch(() => {
         setFavoriteOverride({ id, value: false });
-        showToast(FAVORITE_SAVE_FAILED);
+        showToast(FAVORITE_SAVE_FAILED, { variant: "danger" });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, isAuthenticated, work, id]);
@@ -156,6 +156,13 @@ export function WorkDetailPage() {
   // 추천이 제한·확인 중인데 바로 받을 수 있는 다른 판본이 있으면 자동 펼침 (03 상태별 UI).
   // effect 로 미루지 않고 파생 상태로 둬야 첫 렌더에 바로 펼쳐진다.
   const expanded = expandedOverride ?? hasFreeOther;
+
+  // 03 §251 · 03_기술결정 §28 — 진행 표시·재클릭 차단·10초 자동 복귀는 내 악보와 같은 훅이 맡는다.
+  // 끝 판정은 같은 주소로 보낸 HEAD 한 번(§12)이고, 네이티브 다운로드는 그대로 진행시킨다.
+  const download = useDownloadStart({
+    url: recommended?.downloadUrl ?? null,
+    className: "btn btn-primary btn-lg",
+  });
 
   if (detail.error) {
     // 없는 곡·숨김 곡의 404 — 보조 문구는 곡에 대한 것(00 §2-4 기존). 라우트 404(없는 구분 이름)는 NotFoundPage 가 구분까지 말한다
@@ -211,18 +218,6 @@ export function WorkDetailPage() {
       src: edition.previewUrl,
       caption: `${title} — ${formatEditionKind(edition.kind)} · ${formatEditionScope(edition)} (1쪽/${edition.pageCount}쪽)`,
     });
-
-  // 03 §동작·통신 상태 / 02_API §3-4(HEAD) — <a download> 은 실패를 알 수 없어 같은 주소로 HEAD 한 번을 곁들인다.
-  // 네이티브 다운로드는 그대로 진행시키고(preventDefault 하지 않는다) 결과만 안내에 반영한다.
-  const checkDownload = async () => {
-    setDownloadCheck("checking");
-    try {
-      const response = await authFetch(recommended.downloadUrl, { method: "HEAD" });
-      setDownloadCheck(response.ok ? "idle" : "failed");
-    } catch {
-      setDownloadCheck("failed");
-    }
-  };
 
   return (
     <div className="work-detail">
@@ -360,15 +355,18 @@ export function WorkDetailPage() {
             <div className="edition-card-actions">
               {canDownload ? (
                 <>
-                  <a className="btn btn-primary btn-lg" href={recommended.downloadUrl} download onClick={checkDownload}>
-                    <span className="material-icons" aria-hidden="true">
-                      download
-                    </span>
-                    {downloadCheck === "checking"
-                      ? "받는 중…"
-                      : `PDF 받기 · ${formatFileSizeCompact(recommended.fileSize)}`}
+                  <a {...download.linkProps}>
+                    {/* 받는 중에는 다운로드 아이콘 자리를 스피너가 대신한다 — 내 악보와 같은 마크업(§28-4) */}
+                    {download.busy ? (
+                      <span className="btn-spinner" aria-hidden="true" />
+                    ) : (
+                      <span className="material-icons" aria-hidden="true">
+                        download
+                      </span>
+                    )}
+                    {download.busy ? DOWNLOADING_LABEL : `PDF 받기 · ${formatFileSizeCompact(recommended.fileSize)}`}
                   </a>
-                  {downloadCheck === "failed" ? (
+                  {download.failed ? (
                     <InlineAlert variant="danger">
                       <p>지금은 파일을 받을 수 없어요. 잠시 후 다시 시도해 주세요</p>
                       {work.imslpUrl ? (

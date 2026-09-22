@@ -1503,12 +1503,28 @@ a {
   width: 100%;
 }
 
-.btn:disabled {
+/* `<a download>` 에는 disabled 속성이 없다 — 보이는 잠금은 이 클래스가 맡는다 (03_기술결정 §28-2).
+   pointer-events 는 건드리지 않는다: 클릭이 와야 onClick 에서 막을 수 있고 Enter 도 같은 길로 지나간다 */
+.btn:disabled,
+.btn.is-disabled {
   background-color: var(--color-disabled-bg);
   border-color: var(--color-disabled-bg);
   color: var(--color-disabled-text);
   box-shadow: none;
   cursor: not-allowed;
+}
+
+/* 버튼 안 진행 표시 (03 §251 · 09 §1-2-1) — 받는 중에는 다운로드 아이콘 자리를 이것이 대신한다.
+   본문 가운데 도는 `.spinner`(50px, 미리보기·인증 확인)와 쓰임이 달라 따로 둔다. 색은 글자색을 따라간다 */
+.btn-spinner {
+  display: inline-block;
+  flex: none;
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-full);
+  animation: spin 1s linear infinite;
 }
 
 :focus-visible {
@@ -3049,11 +3065,58 @@ a {
   z-index: var(--z-toast);
   max-width: 90vw;
   padding: var(--space-3) var(--space-5);
+  /* 닫기 버튼이 스스로 터치 영역을 만든다 — 오른쪽 여백은 그만큼 줄인다 (00 §3-11) */
+  padding-right: var(--space-2);
   border-radius: var(--radius-md);
   background-color: var(--color-text);
   color: var(--color-surface);
   font-size: var(--font-size-md);
   box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* 성공 check_circle · 실패 error (00 §3-11, 03_기술결정 §29). 어두운 바탕 위라 테두리 계열 색을 쓴다 */
+.toast-icon {
+  flex: none;
+  font-size: var(--icon-size-md);
+}
+
+.toast-success .toast-icon {
+  color: var(--color-success-border);
+}
+
+.toast-danger .toast-icon {
+  color: var(--color-danger-border);
+}
+
+.toast-message {
+  flex: 1;
+}
+
+/* 수동 닫기 — 되돌리기 버튼과 같은 생김새·같은 터치 영역(--touch-target) */
+.toast-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-surface);
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.toast-close .material-icons {
+  font-size: var(--icon-size-md);
+}
+
+.toast-close:hover {
+  background-color: var(--color-header-item-hover);
 }
 
 /* --- 관리 목록 공통 (05-B·05-D·06-C) ---------------------------------- */
@@ -3922,12 +3985,11 @@ a {
   }
 }
 
-/* --- Toast 되돌리기 변형 (00 §3-11) ---------------------------------- */
+/* --- Toast 되돌리기 변형 (00 §3-11) ----------------------------------
+   한 줄 배치는 이제 `.toast` 가 공통으로 맡는다(아이콘·닫기가 늘 있으므로). 여기서는 간격만 넓힌다 —
+   되돌리기는 누를 것이라 문구와 더 떨어져 있어야 오터치가 줄어든다 */
 .toast-with-action {
-  display: flex;
-  align-items: center;
   gap: var(--space-3);
-  padding-right: var(--space-2);
 }
 
 .toast-action {

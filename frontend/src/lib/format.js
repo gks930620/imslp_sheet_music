@@ -294,15 +294,162 @@ export function formatAutoJudgeSkipReason(reason) {
   return AUTO_JUDGE_SKIP_REASON_LABELS[reason] ?? reason;
 }
 
-/** 추천 지정 경고(02 §5-6) — 판본의 악장 번호는 화면이 이미 가진 데이터에서 쓴다 */
+/**
+ * 추천 지정 경고 6종(02 §5-6-2 · 화면정의 06 A-3 ②-1) — **문구는 화면이 갖는다**(서버는 코드만 준다).
+ * 순서는 화면정의가 고정한 ④ → ⑤ → ① → ⑥ → ② → ③ 그대로다.
+ */
+export const RECOMMEND_WARNING_ORDER = [
+  "WORK_BECOMES_CLOSED",
+  "HAS_DOWNLOAD_HISTORY",
+  "NOT_DOWNLOADABLE",
+  "PARTS",
+  "ARRANGEMENT",
+  "PARTIAL_SCOPE",
+];
+
+/** 경고 묶음 — `바뀌면 생기는 일`(변경의 결과) / `이 판본은 이런 판본이에요`(판본의 성질) */
+export const RECOMMEND_WARNING_GROUPS = [
+  { key: "CHANGE", title: "바뀌면 생기는 일", codes: ["WORK_BECOMES_CLOSED", "HAS_DOWNLOAD_HISTORY"] },
+  {
+    key: "EDITION",
+    title: "이 판본은 이런 판본이에요",
+    codes: ["NOT_DOWNLOADABLE", "PARTS", "ARRANGEMENT", "PARTIAL_SCOPE"],
+  },
+];
+
+/** 경고 문구 안에서 부르는 판정 이름 — 뱃지 문구(`저작권 확인 중`)보다 짧게 부른다(화면정의 06 A-3 ②-1) */
+const COPYRIGHT_SHORT_LABELS = {
+  RESTRICTED: "이용 제한",
+  UNKNOWN: "확인 중",
+};
+
+function copyrightShort(edition) {
+  return COPYRIGHT_SHORT_LABELS[edition?.koreaCopyright] ?? COPYRIGHT_SHORT_LABELS.UNKNOWN;
+}
+
+function movementScope(edition) {
+  return edition?.movementNumber ? `${edition.movementNumber}악장만` : "일부만";
+}
+
+/** 추천 지정 경고 본문 한 줄(02 §5-6-2) — 판본의 악장 번호·판정은 화면이 이미 가진 데이터에서 쓴다 */
 export function formatRecommendWarning(code, edition) {
+  if (code === "WORK_BECOMES_CLOSED") return "지금 받을 수 있는 곡이에요 — 바꾸면 이 곡의 다운로드가 닫혀요";
+  if (code === "HAS_DOWNLOAD_HISTORY") {
+    return "이미 이 곡을 받아 간 사람이 있어요 — 그 사람들의 '받은 악보'에 '지금 추천과 달라요' 표시가 생겨요";
+  }
   if (code === "NOT_DOWNLOADABLE") {
-    return "이 판본은 사용자에게 다운로드가 열리지 않아요 — 저작권 판정을 '자유 이용 가능'으로 바꿔야 해요";
+    return `이 판본은 저작권이 '${copyrightShort(edition)}'이라 사용자에게 다운로드가 열리지 않아요`;
   }
-  if (code === "ARRANGEMENT") return "이 판본은 편곡이에요. 사용자가 원곡 악보를 기대하고 받을 수 있어요";
-  if (code === "PARTIAL_SCOPE") {
-    const scope = edition?.movementNumber ? `${edition.movementNumber}악장만` : "일부만";
-    return `이 판본은 ${scope} 들어 있어요. 곡 전체가 아니에요`;
-  }
+  if (code === "PARTS") return "이 판본은 한 악기 파트만 담고 있어요 — 피아노 독주곡에는 맞지 않을 수 있어요";
+  if (code === "ARRANGEMENT") return "이 판본은 편곡이에요 — 사용자가 원곡 악보를 기대하고 받을 수 있어요";
+  if (code === "PARTIAL_SCOPE") return `이 판본은 ${movementScope(edition)} 들어 있어요 — 곡 전체가 아니에요`;
   return "";
+}
+
+/**
+ * 경고의 보조 줄(화면정의 06 A-3 ②-1). 없으면 빈 문자열.
+ * ①은 해결 방법을, ④는 무엇이 사라지는지를 말한다 — 이 비대칭이 "성질 vs 결과"를 한 번 더 굳힌다.
+ */
+export function formatRecommendWarningHelp(code, edition) {
+  if (code === "WORK_BECOMES_CLOSED") {
+    const label = edition?.koreaCopyright === "RESTRICTED" ? "한국에서 이용 제한" : "저작권 확인 중";
+    return `곡 상세의 'PDF 받기'가 사라지고 상태가 '${label}'이 돼요`;
+  }
+  if (code === "NOT_DOWNLOADABLE") return "판정을 '자유 이용 가능'으로 바꾸면 열려요";
+  return "";
+}
+
+/** 경고 상자의 톤 — 들어 있는 것 중 가장 무거운 것 하나(화면정의 06 A-3 ②) */
+export function recommendWarningVariant(codes = []) {
+  if (codes.includes("WORK_BECOMES_CLOSED")) return "danger";
+  if (codes.some((code) => code !== "HAS_DOWNLOAD_HISTORY")) return "warning";
+  return "info";
+}
+
+/**
+ * 추천을 고른 사유 6개(02 §5-6 `RecommendationReason`) — **선언 순서가 곧 화면 나열 순서**다.
+ * 계약은 코드만 주고 문구는 여기 하나에서 갖는다(A-1 상자·A-3 패널·이력이 같은 문장을 쓴다).
+ * `needsPrevious` 는 첫 지정에서 감추는 둘 — 앞 추천이 없는데 고르면 근거가 거짓이 된다(화면정의 06 A-3 ③).
+ */
+export const RECOMMEND_REASONS = [
+  {
+    code: "NOT_THIS_WORK",
+    label: "앞 추천이 이 곡의 악보가 아니었어요",
+    help: "다른 편성(총보 등)이거나 아예 다른 곡이었어요",
+    needsPrevious: true,
+  },
+  { code: "BETTER_READABILITY", label: "이 판본이 더 읽기 좋아요", help: "스캔이 깨끗하거나 조판이 또렷해요" },
+  {
+    code: "BETTER_FOR_LEARNERS",
+    label: "이 판본의 편집·운지가 배우는 사람에게 맞아요",
+    help: "운지·페달 표기가 레슨에 쓸 만해요",
+  },
+  {
+    code: "PREVIOUS_UNAVAILABLE",
+    label: "앞 추천은 지금 받을 수 없어요",
+    help: "파일이 없거나 이용 제한이 됐어요",
+    needsPrevious: true,
+  },
+  { code: "COVERS_WHOLE_WORK", label: "이 판본이 곡 전체를 담고 있어요", help: "또는 이 곡에 맞는 범위예요" },
+  { code: "OTHER", label: "기타 — 직접 적기", help: "메모에 이유를 적어 주세요 (필수)" },
+];
+
+/** 고른 사유 한 문장. 모르는 코드는 빈 문자열(지어내지 않는다) */
+export function formatRecommendReason(code) {
+  return RECOMMEND_REASONS.find((reason) => reason.code === code)?.label ?? "";
+}
+
+/** 추천이 빠진 줄의 사유 자리(02 §4-7-2 `clearedReason`) */
+const CLEARED_REASON_LABELS = {
+  EDITION_DELETED: "추천을 뺐어요 — 판본 삭제",
+  EDITION_FILE_REMOVED: "추천을 뺐어요 — 추천 판본에서 파일을 뗐어요",
+};
+
+export function formatClearedReason(reason) {
+  return CLEARED_REASON_LABELS[reason] ?? "추천을 뺐어요";
+}
+
+/** 자동 지정 규칙 한 줄(02 §4-7-2 `auto.rule`) */
+export function formatAutoRule(rule) {
+  if (rule === "MOST_IMSLP_DOWNLOADS") return "전체 악보 · 전곡 · 파일 있는 판본 중 IMSLP 다운로드가 가장 많은 것";
+  return "";
+}
+
+/**
+ * 자동 지정의 "그때 그 값" 한 줄(화면정의 06 A-1 셋째 줄 — 세 갈래).
+ *
+ * **"후보 1개" 와 "다운로드 수 없음" 은 서로 다른 분기**다. 후보가 하나였다면 고른 게 아니라 **남은 것**이라
+ * "1위" 가 거짓 안심을 준다 — 둘 다 해당되면 후보 1개 쪽이 이긴다(02 §4-7-2).
+ */
+export function formatAutoEvidence(auto) {
+  if (!auto) return "";
+  const count = auto.imslpDownloadCount;
+  if (auto.candidateCount === 1) {
+    const tail = count === null || count === undefined ? "" : ` (IMSLP 다운로드 ${formatCount(count)}회)`;
+    return `고를 수 있는 판본이 이것 하나뿐이었어요${tail}`;
+  }
+  const head =
+    count === null || count === undefined
+      ? "IMSLP 다운로드 수가 적혀 있지 않은 판본이에요"
+      : `IMSLP 다운로드 ${formatCount(count)}회`;
+  return `${head} · 후보 ${formatCount(auto.candidateCount)}개 중 ${auto.rank}위`;
+}
+
+/** 판본 스냅샷 한 줄 `{출판사} / {편집자} / {연도}` — 없는 값은 `–`(02 §4-7-2 RecommendationEditionRefDTO) */
+export function formatEditionImprint(ref) {
+  if (!ref) return "";
+  return [ref.publisher || "–", ref.editor || "–", ref.publishYear ?? "–"].join(" / ");
+}
+
+/** 판본 스냅샷 전체 `{종류} · {포함 범위} · {출판사} / {편집자} / {연도}` */
+export function formatEditionSnapshot(ref) {
+  if (!ref) return "";
+  return `${formatEditionKind(ref.kind)} · ${formatEditionScope(ref)} · ${formatEditionImprint(ref)}`;
+}
+
+/** 이력·근거 줄의 "누가" — 닉네임이 비면 `관리자`(로그인 아이디로 떨어지지 않는다, 화면정의 06 A-1) */
+export function formatDecidedBy(log) {
+  if (!log) return "";
+  if (log.source === "AUTO") return "자동";
+  return log.decidedByNickname ? `${log.decidedByNickname} 님` : "관리자";
 }

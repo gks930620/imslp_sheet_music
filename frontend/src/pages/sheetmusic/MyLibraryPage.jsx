@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { Pagination } from "../../components/Pagination.jsx";
 import { PageTabs } from "../../components/sheetmusic/PageTabs.jsx";
@@ -10,8 +10,9 @@ import { TOAST_UNDO_MS, showToast } from "../../components/common/Toast.jsx";
 import { useApiResource } from "../../hooks/useApiResource.js";
 import { useSection, useSectionPath } from "../../hooks/useSection.js";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle.js";
+import { DOWNLOADING_LABEL, useDownloadStart } from "../../hooks/useDownloadStart.js";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { authFetch, callApi } from "../../lib/http.js";
+import { callApi } from "../../lib/http.js";
 import { formatEditionBrief, formatReceivedDate } from "../../lib/format.js";
 import { linkSection } from "../../lib/sections.js";
 import { LOGIN_REASON, loginHref, saveLoginIntent } from "../../lib/loginIntent.js";
@@ -54,7 +55,6 @@ export function MyLibraryPage() {
 
   // 토스트의 "되돌리기" 는 React 트리 밖(body 에 붙은 버튼)에서 늦게 불린다 — 그때의 최신 목록을 읽을 창구가 필요하다
   const dataRef = useRef(null);
-  const [downloadState, setDownloadState] = useState({});
   const pendingFocus = useRef(null);
   const listRef = useRef(null);
 
@@ -135,7 +135,7 @@ export function MyLibraryPage() {
     patchData((current) => withWorkAt(current, work, index));
     callApi(`/api/me/favorites/${work.id}`, { method: "PUT" }).catch(() => {
       patchData((current) => withoutWork(current, work.id));
-      showToast(FAVORITE_SAVE_FAILED);
+      showToast(FAVORITE_SAVE_FAILED, { variant: "danger" });
     });
   };
 
@@ -148,23 +148,8 @@ export function MyLibraryPage() {
     });
     callApi(`/api/me/favorites/${work.id}`, { method: "DELETE" }).catch(() => {
       patchData((current) => withWorkAt(current, work, index));
-      showToast(FAVORITE_SAVE_FAILED);
+      showToast(FAVORITE_SAVE_FAILED, { variant: "danger" });
     });
-  };
-
-  /** 02 §10-3 — "다시 받기" 성공은 곡 상세와 같은 방식으로 안다: 같은 주소로 HEAD 한 번(§3-4) */
-  const redownload = async (row) => {
-    const url = row.redownloadUrl;
-    if (!url) return;
-    const workId = row.work.id;
-    setDownloadState((prev) => ({ ...prev, [workId]: "checking" }));
-    try {
-      const response = await authFetch(url, { method: "HEAD" });
-      setDownloadState((prev) => ({ ...prev, [workId]: response.ok ? "idle" : "failed" }));
-      if (response.ok) markReceivedNow(workId);
-    } catch {
-      setDownloadState((prev) => ({ ...prev, [workId]: "failed" }));
-    }
   };
 
   /**
@@ -236,8 +221,7 @@ export function MyLibraryPage() {
                     key={row.work.id}
                     row={row}
                     workHref={sectionPath(`/works/${row.work.id}`)}
-                    state={downloadState[row.work.id] ?? "idle"}
-                    onDownload={() => redownload(row)}
+                    onSuccess={() => markReceivedNow(row.work.id)}
                   />
                 ))
               : pageData.content.map((work, index) => (
@@ -317,13 +301,22 @@ function LibraryEmptyState({ tab, homeHref }) {
  * 받은 악보 한 항목 — 곡 카드(링크) + 링크 밖 "받기 영역". 09 §1-2-2 의 3상태를 **버튼 하나·문장 하나**로 가른다:
  * ① 다시 받기만 / ② 다시 받기 + 한 줄 / ③ 문장 + (지금 추천 판본 받기 | 곡 보기).
  */
-function ReceivedRow({ row, workHref, state, onDownload }) {
+function ReceivedRow({ row, workHref, onSuccess }) {
   const receivedLine = formatEditionBrief(row.receivedEdition);
   const alternativeLine = formatEditionBrief(row.alternativeEdition);
   const unavailable = row.redownloadState === "UNAVAILABLE";
   const changed = row.redownloadState === "RECOMMENDATION_CHANGED";
   const canDownload = Boolean(row.redownloadUrl);
-  const downloading = state === "checking";
+
+  /**
+   * 02 §10-3 · 03_기술결정 §28 — "다시 받기" 의 진행 표시는 곡 상세와 **같은 훅**이 맡는다(같은 동작은 같게 보인다).
+   * 진행 상태의 자리가 곧 이 행이다 — 페이지가 `{[workId]: state}` 맵을 들 필요가 없다(§28-4).
+   */
+  const download = useDownloadStart({
+    url: row.redownloadUrl ?? null,
+    className: "btn btn-primary library-receive-btn",
+    onSuccess,
+  });
 
   return (
     <div className="library-item library-item-received">
@@ -352,11 +345,16 @@ function ReceivedRow({ row, workHref, state, onDownload }) {
         ) : null}
 
         {canDownload ? (
-          <a className="btn btn-primary library-receive-btn" href={row.redownloadUrl} download onClick={onDownload}>
-            <span className="material-icons" aria-hidden="true">
-              download
-            </span>
-            {downloading ? "받는 중…" : unavailable ? "지금 추천 판본 받기" : "다시 받기"}
+          <a {...download.linkProps}>
+            {/* 받는 중에는 다운로드 아이콘 자리를 스피너가 대신한다 — 곡 상세와 같은 마크업(§28-4) */}
+            {download.busy ? (
+              <span className="btn-spinner" aria-hidden="true" />
+            ) : (
+              <span className="material-icons" aria-hidden="true">
+                download
+              </span>
+            )}
+            {download.busy ? DOWNLOADING_LABEL : unavailable ? "지금 추천 판본 받기" : "다시 받기"}
           </a>
         ) : (
           <Link className="btn btn-outline library-receive-btn" to={workHref}>
@@ -377,7 +375,7 @@ function ReceivedRow({ row, workHref, state, onDownload }) {
           </p>
         ) : null}
 
-        {state === "failed" ? (
+        {download.failed ? (
           <InlineAlert variant="danger">
             <p>{REDOWNLOAD_FAILED}</p>
             <Link className="btn btn-text" to={workHref}>

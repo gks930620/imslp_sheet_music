@@ -9,13 +9,14 @@ import { expectNoText, expectText, findText } from "../../../test/text.js";
 // 06_관리자_판본관리.md 화면 A — 곡 편집 화면(/admin/works/:id) 아래 판본 목록.
 // props: workId, editions(AdminEditionDTO[] — 서버 정렬 그대로), recommendedEditionId, candidateEditionId,
 //        composer({id, nameKo, nameOriginal, deathYear}), onChanged(), onToast(message)
-// 02_API §5-5(삭제) / §5-6(추천 지정) / §5-7(파일 받아오기, 202 + 3초 폴링) / §5-2·5-3(모달 저장)
+// 02_API §5-5(삭제) / §5-7(파일 받아오기, 202 + 3초 폴링) / §5-2·5-3(모달 저장)
+// **§5-6(추천 지정)은 2026-09-21부터 이 파일이 아니다** — 지정이 A-3 패널을 거치게 되어
+// EditionListSection.recommendPanel.test.jsx(패널이 열리는 것)와 RecommendChangePanel.test.jsx(패널 안)로 옮겼다.
 //
 // 추천·후보 표시의 단일 기준은 **props(recommendedEditionId/candidateEditionId)** 다 (2026-09-07 senior-dev, 02 §4-7 주석).
 // 판본 배열의 isRecommended/isCandidate 는 같은 사실의 파생값이라 화면에서는 읽지 않는다 —
 // 추천은 "곡의 속성"이고(§5-6 응답도 곡 기준으로 돌아온다), 한 곡에 추천 하나라는 불변조건이 id 비교에서 구조적으로 지켜진다.
 // 그래서 아래 픽스처가 isRecommended:true 여도 props 가 null 이면 추천 표시는 없어야 한다(의도된 어긋남).
-const RECOMMEND = /\/api\/admin\/works\/21\/recommended-edition$/;
 const DELETE_302 = /\/api\/admin\/editions\/302$/;
 const FETCH_FILE = /\/api\/admin\/editions\/304\/fetch-file$/;
 const EDITION_304 = /\/api\/admin\/editions\/304$/;
@@ -114,114 +115,22 @@ describe("EditionListSection — 목록·행 표시", () => {
   });
 });
 
+/**
+ * 추천 지정 — **2026-09-21 계약 개정으로 이 자리가 얇아졌다** (기획 06 §3-1, 화면정의 06 A-2·A-3).
+ *
+ * <p>누르면 즉시 {@code PUT} 하던 흐름이 사라지고, 그 행 아래 A-3 패널이 열린다. 그래서 여기 있던
+ * "지정 → Toast / 지정 → 행 아래 경고 / 지정 실패" 세 가지는 각각 다음으로 옮겼다:
+ * <ul>
+ *   <li>패널이 열리는 것 · Toast · 바꾼 뒤 행에 경고를 남기지 않는 것 → {@code EditionListSection.recommendPanel.test.jsx}</li>
+ *   <li>바꾸기 전 경고 · 사유 · 메모 · 확인 체크 · 실패 처리 → {@code RecommendChangePanel.test.jsx}</li>
+ * </ul>
+ * 이 자리에 남는 것은 <b>패널을 열 수조차 없는 행</b>의 규칙 하나뿐이다.
+ */
 describe("EditionListSection — 추천 지정", () => {
-  it("후보 행은 '이 후보를 추천으로 지정' → PUT 후 onChanged·onToast", async () => {
-    const user = userEvent.setup();
-    const { onChanged, onToast } = renderSection({
-      candidateEditionId: 302,
-      routes: [
-        {
-          url: RECOMMEND,
-          method: "PUT",
-          data: { workId: 21, previousEditionId: 301, editionId: 302, workStatus: "READY", warnings: [] },
-        },
-      ],
-    });
-    await user.click(within(row(302)).getByRole("button", { name: "이 후보를 추천으로 지정" }));
-    await waitFor(() => expect(findCalls(RECOMMEND)).toHaveLength(1));
-    expect(findCalls(RECOMMEND)[0].body).toEqual({ editionId: 302 });
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    expect(onToast).toHaveBeenCalledWith("추천 판본을 전체 악보 · Breitkopf & Härtel에서 전체 악보 · Peters로 바꿨어요");
-  });
-
-  it("이전 추천이 없으면 '추천 판본으로 지정했어요'", async () => {
-    const user = userEvent.setup();
-    const { onToast } = renderSection({
-      recommendedEditionId: null,
-      routes: [
-        {
-          url: RECOMMEND,
-          method: "PUT",
-          data: { workId: 21, previousEditionId: null, editionId: 302, workStatus: "PREPARING", warnings: [] },
-        },
-      ],
-    });
-    await user.click(within(row(302)).getByRole("button", { name: "추천으로 지정" }));
-    await waitFor(() => expect(onToast).toHaveBeenCalledWith("추천 판본으로 지정했어요"));
-  });
-
-  it("판정이 FREE 가 아니면 그 행 아래 다운로드가 열리지 않는다는 경고", async () => {
-    const user = userEvent.setup();
-    renderSection({
-      recommendedEditionId: null,
-      routes: [
-        {
-          url: RECOMMEND,
-          method: "PUT",
-          data: {
-            workId: 21,
-            previousEditionId: null,
-            editionId: 302,
-            workStatus: "UNKNOWN",
-            warnings: ["NOT_DOWNLOADABLE"],
-          },
-        },
-      ],
-    });
-    await user.click(within(row(302)).getByRole("button", { name: "추천으로 지정" }));
-    await findText("이 판본은 사용자에게 다운로드가 열리지 않아요 — 저작권 판정을 '자유 이용 가능'으로 바꿔야 해요");
-  });
-
-  // 02 §5-6 (기획 §11-2 ①): 경고는 목록이다 — 겹치면 전부 보인다. 하나만 보이면 관리자는 나머지를 모른 채 지정한다.
-  it("경고가 겹치면 세 줄이 모두 보인다 (확인 중 · 편곡 · N악장만)", async () => {
-    const user = userEvent.setup();
-    const arrangedMovement = adminEdition({
-      id: 302,
-      isRecommended: false,
-      kind: "ARRANGEMENT",
-      scope: "MOVEMENT",
-      movementNumber: 2,
-      koreaCopyright: "UNKNOWN",
-      downloadable: false,
-      downloadUrl: null,
-    });
-    renderSection({
-      editions: [arrangedMovement],
-      recommendedEditionId: null,
-      routes: [
-        {
-          url: RECOMMEND,
-          method: "PUT",
-          data: {
-            workId: 21,
-            previousEditionId: null,
-            editionId: 302,
-            workStatus: "UNKNOWN",
-            warnings: ["NOT_DOWNLOADABLE", "ARRANGEMENT", "PARTIAL_SCOPE"],
-          },
-        },
-      ],
-    });
-    await user.click(within(row(302)).getByRole("button", { name: "추천으로 지정" }));
-    await findText("이 판본은 사용자에게 다운로드가 열리지 않아요");
-    expectText("이 판본은 편곡이에요");
-    expectText("이 판본은 2악장만 들어 있어요");
-  });
-
   it("파일이 없는 행의 추천 지정 버튼은 비활성 + 이유를 적는다", () => {
     renderSection();
     expect(within(row(304)).getByRole("button", { name: "추천으로 지정" })).toBeDisabled();
     expect(row(304)).toHaveTextContent("파일이 없어 추천으로 지정할 수 없어요");
-  });
-
-  it("추천 지정 실패 → 그 행 아래 '처리하지 못했어요. 잠시 후 다시 시도해 주세요'", async () => {
-    const user = userEvent.setup();
-    renderSection({
-      recommendedEditionId: null,
-      routes: [{ url: RECOMMEND, method: "PUT", status: 500, error: "INTERNAL_ERROR", message: "서버 오류" }],
-    });
-    await user.click(within(row(302)).getByRole("button", { name: "추천으로 지정" }));
-    await findText("처리하지 못했어요. 잠시 후 다시 시도해 주세요");
   });
 });
 

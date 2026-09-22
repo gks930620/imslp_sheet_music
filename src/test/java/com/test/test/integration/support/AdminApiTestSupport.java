@@ -351,9 +351,64 @@ public abstract class AdminApiTestSupport extends ApiIntegrationTestSupport {
         return data(adminGet(tokens, "/api/admin/editions/{id}", editionId).andExpect(status().isOk()));
     }
 
+    /**
+     * §5-6 추천 지정 — <b>2026-09-21 개정: 사유가 필수다</b>(기획 06 §1-4).
+     * 사유가 본체가 아닌 시나리오는 이 기본값({@code BETTER_READABILITY}, 메모 없음, 검수 안 함)을 쓴다.
+     * 사유·메모·검수 자체를 시험하는 곳은 {@link #recommendBody}/{@link #setRecommended(Tokens, long, java.util.Map)}.
+     */
     protected JsonNode setRecommended(Tokens tokens, long workId, long editionId) throws Exception {
-        return data(adminPut(tokens, "/api/admin/works/{workId}/recommended-edition", json("editionId", editionId), workId)
+        return setRecommended(tokens, workId, recommendBody(editionId, "BETTER_READABILITY", null, null));
+    }
+
+    /** §5-6 요청 본문 — null 을 담을 수 있어야 해서 {@code json(...)} 을 쓴다(빠진 키와 null 은 다른 시험이다). */
+    protected Map<String, Object> recommendBody(Long editionId, String reason, String note, Boolean reviewed) {
+        return json("editionId", editionId, "reason", reason, "note", note, "reviewed", reviewed);
+    }
+
+    protected JsonNode setRecommended(Tokens tokens, long workId, Map<String, Object> body) throws Exception {
+        return data(adminPut(tokens, "/api/admin/works/{workId}/recommended-edition", body, workId)
                 .andExpect(status().isOk()));
+    }
+
+    /** §4-7-2 곡 상세 안의 추천 근거 묶음. 추천·기록이 없어도 <b>객체는 항상 있다</b>. */
+    protected JsonNode recommendation(Tokens tokens, long workId) throws Exception {
+        return getWork(tokens, workId).path("recommendation");
+    }
+
+    /** §5-6-2 바꾸기 전 경고 예고. */
+    protected List<String> changePreviewWarnings(Tokens tokens, long workId, long editionId) throws Exception {
+        JsonNode result = data(adminQuery(tokens, "/api/admin/works/" + workId + "/recommended-edition/preview",
+                "editionId", String.valueOf(editionId)).andExpect(status().isOk()));
+        return strings(result.path("warnings"));
+    }
+
+    /**
+     * IMSLP 누적 다운로드 수를 심는다 — <b>저장 API 에 경로가 없는 값</b>이다(§5-2·§5-3 요청 DTO 에 없다).
+     * 수집만이 넣는 값이라, 자동 추천 근거(§5-11 {@code auto.imslpDownloadCount})를 시험하려면 이 수밖에 없다.
+     * 벌크 JPQL 은 영속성 컨텍스트를 건너뛰므로 앞뒤로 flush·clear 해 같은 트랜잭션의 읽기가 새 값을 보게 한다.
+     */
+    protected void setImslpDownloadCount(long editionId, Integer count) {
+        entityManager.flush();
+        entityManager.createQuery("update EditionEntity e set e.imslpDownloadCount = :count where e.id = :id")
+                .setParameter("count", count)
+                .setParameter("id", editionId)
+                .executeUpdate();
+        entityManager.clear();
+    }
+
+    /**
+     * 그 곡의 추천 근거 기록을 전부 지운다 — <b>실데이터 42곡(기획 06 §5 소급 없음)을 재현하는 유일한 수단</b>이다.
+     * "추천은 있는데 기록이 없다" 는 상태를 만드는 API 경로는 없고(모든 지정 경로가 줄을 쌓는다), 있어서도 안 된다.
+     *
+     * <p><b>네이티브 문장이라 컴파일 타임에 걸리지 않는다</b> — 01_ERD §3-13 의 표 이름이 바뀌면 여기도 같이 고친다
+     * ({@code user_work_download} upsert 와 같은 갈래의 드리프트 위험 — 01_ERD §3-12).
+     */
+    protected void clearRecommendationLog(long workId) {
+        entityManager.flush();
+        entityManager.createNativeQuery("delete from work_recommendation_log where work_id = :workId")
+                .setParameter("workId", workId)
+                .executeUpdate();
+        entityManager.clear();
     }
 
     /** 바로 받기 가능한 곡(READY): 파일 있는 FREE 판본을 추천으로. 반환은 판본 id. */

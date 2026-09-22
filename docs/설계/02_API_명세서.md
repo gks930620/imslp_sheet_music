@@ -217,6 +217,7 @@
 | | `copyrightNote` | 1000 |
 | | `ccLicenseName` | 100 |
 | | `ccAttribution` | 200 |
+| §5-6 추천 지정 | `note`(고른 이유 메모) | **300** (2026-09-21 추가) |
 | §5-9·§5-10 판정 | `copyrightNote` | 1000 |
 | §6-1 수집 확인 | `urls[]` 각 항목 | 500 |
 | §6-2 수집 시작 | `items[].url` | 500 |
@@ -308,12 +309,14 @@
 | PUT | `/api/admin/works/{id}` | 곡 수정 | 05-E |
 | DELETE | `/api/admin/works/{id}` | 곡 삭제(판본·파일 포함) | 05-E |
 | GET | `/api/admin/works/aliases/overlap` | 별칭이 다른 곡 몇 개에 있는지 | 05-E |
+| GET | `/api/admin/works/{workId}/recommendation-history` | 바뀐 이력 **전부**("더 보기") (§4-7-1) | 06-A |
 | POST | `/api/admin/edition-files` | PDF 업로드(쪽수·크기·미리보기 자동) | 06-B |
 | POST | `/api/admin/works/{workId}/editions` | 판본 추가 | 06-B |
 | GET | `/api/admin/editions/{id}` | 판본 1개(수정 모달·받아오기 폴링) | 06-A/B |
 | PUT | `/api/admin/editions/{id}` | 판본 수정(파일 교체 포함) | 06-B |
 | DELETE | `/api/admin/editions/{id}` | 판본 삭제 | 06-A |
-| PUT | `/api/admin/works/{workId}/recommended-edition` | 추천 판본 지정 | 06-A |
+| PUT | `/api/admin/works/{workId}/recommended-edition` | 추천 판본 지정 (**사유 필수** — §5-6, 2026-09-21 개정) | 06-A |
+| GET | `/api/admin/works/{workId}/recommended-edition/preview` | **바꾸기 전** 경고 6종 예고 (§5-6-2, 2026-09-21 신설) | 06-A |
 | PUT | `/api/admin/works/{workId}/recommended-edition/review` | 추천 판본 확인함/해제 (§5-6-1) | 06-A |
 | POST | `/api/admin/editions/{id}/fetch-file` | IMSLP 에서 이 판본 파일 받아오기(비동기) | 06-A |
 | GET | `/api/admin/copyright/pending` | 저작권 판정 대기함 | 06-C |
@@ -871,8 +874,22 @@ GET /api/works/recent?ids=23,21,999&section=PIANO
 | size | 선택. **기본 20, 최대 200**(초과는 200 으로 자름, 1 미만은 기본 20) — §4-2 와 같은 규칙 |
 정렬 `updated_at DESC, id DESC`. 응답 `{ "unfilteredTotal": 312, "works": PageResponse<AdminWorkSummaryDTO> }`
 
-`AdminWorkSummaryDTO`: `{ id, titleKo, titleOriginal, composer: ComposerRefDTO, catalogNumbers, level, editionCount, hasRecommended, recommendationReviewed, status, needsWork, hidden, updatedAt }`
+`AdminWorkSummaryDTO`: `{ id, titleKo, titleOriginal, composer: ComposerRefDTO, catalogNumbers, level, editionCount, hasRecommended, recommendationReviewed, recommendationSource, status, needsWork, hidden, updatedAt }`
 - `recommendationReviewed`(boolean, 2026-09-08 신설) — 목록의 "미검수" 표시. `hasRecommended == false` 인 곡은 항상 `false` 이고 표시하지 않는다(검수할 대상이 없다).
+- **`recommendationSource`**(`"AUTO" | "ADMIN" | null`, **2026-09-21 신설** — 기획 06 §2-2, 화면정의 05 화면 D): 지금 추천을 **누가 골랐나**. 곡 목록의 추천 열이 `★` 하나로 말하던 것을 넷으로 나눈다.
+
+  | `hasRecommended` | `recommendationSource` | 화면 |
+  |---|---|---|
+  | false | **항상 null** | `–` |
+  | true | `AUTO` | `★ 자동` |
+  | true | `ADMIN` | `★ 사람` |
+  | true | **null** | `★ 기록 없음` (실데이터 42곡 — 기획 06 §5) |
+
+  값은 그 곡 `work_recommendation_log` 의 **맨 위 줄이 `ASSIGNED` 일 때 그 줄의 `source`** 다. 줄이 없으면 null.
+  - **"기록 없음" 을 enum 상수로 만들지 않는다.** `NO_RECORD` 같은 값을 넣으면 **DB 에 저장될 수 있는 값의 집합과 응답 값의 집합이 갈려**, 다음 사람이 "이 값은 왜 로그 테이블에 없지?" 를 매번 다시 판단한다. 없음은 **null 하나로** 말한다(§5-6-2 의 `warnings` 가 빈 배열 하나로 말하는 것과 같은 원칙).
+  - **미검수 표시(`recommendationReviewed`)와 겹치지 않는다** — 다른 질문의 답이다. 미검수 = "아무도 미리보기를 열어 보지 않았다", 자동/사람 = "이 판본을 고른 것이 기계인가 사람인가". 자동 지정된 뒤 관리자가 미리보기만 확인한 곡은 `AUTO` + `reviewed=true` 로 남는다(기획 06 §2-2).
+  - **새 필터를 만들지 않는다**(기획 8-E 4). `status` 값에 추가되는 것이 없다.
+  - 계약 검증: `RecommendationHistoryApiIntegrationTest`.
 
 ### 4-7. `GET /api/admin/works/{id}` — 곡 상세(관리)
 `AdminWorkDetailDTO`
@@ -887,6 +904,7 @@ GET /api/works/recent?ids=23,21,999&section=PIANO
   "hidden": false, "hiddenReason": null,
   "status": "READY", "needsWork": false, "missing": [],
   "recommendedEditionId": 301, "candidateEditionId": null, "recommendationReviewed": false,
+  "recommendation": { "current": { … }, "historyCount": 3, "history": [ … ], "hasMore": false },
   "downloadCount": 312, "hasDownloadHistory": true,
   "editions": [ AdminEditionDTO… ],
   "createdAt": "2026-09-06T05:02:00Z", "updatedAt": "2026-09-06T05:02:00Z"
@@ -904,6 +922,7 @@ GET /api/works/recent?ids=23,21,999&section=PIANO
   전체 교체 계약에 필드별 예외를 만든다. 계약 검증: `AdminWorkCollectionGuideIntegrationTest`.
 - `candidateEditionId`: 01_ERD §3-3 규칙(추천 없을 때만 값, 있으면 null).
 - `recommendationReviewed`(boolean, 2026-09-08 신설): 지금 추천 판본이 사람 눈을 통과했는가. 규칙·API 는 §5-6-1.
+- **`recommendation`(객체, 2026-09-21 신설)**: "이 판본을 고른 이유" + "바뀐 이력" 최근 5줄. 전체 모양은 **§4-7-2**. 추천이 없거나 기록이 없는 곡에도 **객체는 항상 있다**(`current: null`, `history: []`) — 빈 상태를 두 가지로 만들지 않는다.
 - `editions` 정렬: 추천 → 추천 후보 → 파일 있음(imslp_download_count DESC) → 파일 없음(imslp_download_count DESC) → id.
 - 404 없는 id(숨김 곡은 관리자에게 보임).
 
@@ -911,6 +930,131 @@ GET /api/works/recent?ids=23,21,999&section=PIANO
 - JSON 이름은 **`isRecommended`/`isCandidate` 하나뿐**이다 — `recommended`/`candidate` 를 같이 내보내지 않는다(계약 밖 필드가 있으면 스택마다 다른 이름에 붙는다).
 
 `AdminEditionDTO` = `EditionDTO` + `{ imslpFileId, imslpOriginalFileName, imslpDescription, imslpLicenseCode, imslpDownloadCount, pdfFileId, previewFileId, copyrightNote, copyrightJudgedAt, copyrightJudgedBy, fileFetchStatus, fileFetchError, fileFetchedAt, downloadCount, isRecommended, isCandidate, createdAt, updatedAt }`
+
+#### 4-7-2. `recommendation` — "이 판본을 고른 이유" 와 "바뀐 이력" (2026-09-21 신설)
+
+§4-7 응답에 **객체 하나**로 들어간다. 화면정의 06 A-1 이 그리는 세 모양(자동 / 사람 / 기록 없음)과 접힘 이력이 전부 여기서 나온다.
+
+```json
+"recommendation": {
+  "current": {
+    "id": 91, "decidedAt": "2026-09-20T02:02:00Z",
+    "source": "ADMIN", "action": "ASSIGNED", "decidedByNickname": "창희",
+    "edition": { "editionId": 302, "kind": "COMPLETE_SCORE", "scope": "COMPLETE", "movementNumber": null,
+                 "publisher": "Peters", "editor": "Köhler", "publishYear": 1880 },
+    "previousEdition": { "editionId": 301, "kind": "COMPLETE_SCORE", "scope": "COMPLETE", "movementNumber": null,
+                 "publisher": "Breitkopf", "editor": "Lebert", "publishYear": 1862 },
+    "auto": null,
+    "reason": "NOT_THIS_WORK", "note": "앞 추천은 관현악 총보였음", "clearedReason": null
+  },
+  "historyCount": 3,
+  "history": [ /* 최신순 최대 5줄. history[0] 은 current 와 같은 줄이다 */ ],
+  "hasMore": false
+}
+```
+
+자동으로 지정된 줄은 `auto` 가 채워지고 `reason`·`note`·`decidedByNickname` 이 전부 null 이다:
+```json
+{ "id": 40, "decidedAt": "2026-09-07T05:20:00Z", "source": "AUTO", "action": "ASSIGNED", "decidedByNickname": null,
+  "edition": { "editionId": 301, "kind": "COMPLETE_SCORE", "scope": "COMPLETE", "movementNumber": null,
+               "publisher": "Breitkopf", "editor": "Lebert", "publishYear": 1862 },
+  "previousEdition": null,
+  "auto": { "rule": "MOST_IMSLP_DOWNLOADS", "imslpDownloadCount": 1204, "candidateCount": 3, "rank": 1 },
+  "reason": null, "note": null, "clearedReason": null }
+```
+
+추천이 빠진 줄:
+```json
+{ "id": 92, "decidedAt": "2026-09-21T01:10:00Z", "source": "ADMIN", "action": "CLEARED", "decidedByNickname": "창희",
+  "edition": null,
+  "previousEdition": { "editionId": null, "kind": "COMPLETE_SCORE", "scope": "COMPLETE", "movementNumber": null,
+                       "publisher": "Peters", "editor": "Köhler", "publishYear": 1880 },
+  "auto": null, "reason": null, "note": null, "clearedReason": "EDITION_DELETED" }
+```
+
+| 필드 | 타입 | 규칙 |
+|---|---|---|
+| `current` | `RecommendationLogDTO` \| **null** | **지금 추천을 정한 줄.** 맨 위 줄이 `ASSIGNED` 면 그 줄, `CLEARED` 면 **null**, 줄이 없으면 **null** |
+| `historyCount` | int | 전체 줄 수. 화면 접힘 헤더 `▸ 바뀐 이력 (N)`. **2 미만이면 화면이 헤더를 만들지 않는다**(화면정의 06 A-1) |
+| `history` | 배열 | 최신순 **최대 5줄**. `historyCount = 0` 이면 **빈 배열**(null 이 아니다) |
+| `hasMore` | boolean | `historyCount > history.length`. true 면 화면이 `더 보기`(§4-7-1)를 띄운다 |
+
+`RecommendationLogDTO`
+
+| 필드 | 타입 | 규칙 |
+|---|---|---|
+| `id` | long | 이력 줄 id(화면 key) |
+| `decidedAt` | ISO8601 UTC | 화면은 `2026-09-20 11:02`(§0-4 관리 화면 형식) |
+| `source` | `AUTO` \| `ADMIN` | 화면 1단: `자동` / `{닉네임} 님` |
+| `action` | `ASSIGNED` \| `CLEARED` | |
+| `decidedByNickname` | string \| null | `source = ADMIN` 일 때만. **닉네임이다 — 로그인 아이디를 내려보내지 않는다**(화면정의 06 A-1 "관리자 이름 표기"). 닉네임이 비어 있으면 null → 화면 `관리자` |
+| `edition` | `RecommendationEditionRefDTO` \| null | `ASSIGNED` 면 값, `CLEARED` 면 null |
+| `previousEdition` | 〃 \| null | **null = 처음 지정** → 화면 `처음 지정한 추천이에요` |
+| `auto` | 객체 \| null | `source = AUTO` 일 때만 |
+| `reason` | enum \| null | `ADMIN` + `ASSIGNED` 일 때만 |
+| `note` | string \| null | 메모. 없으면 null(빈 문자열을 내려보내지 않는다) |
+| `clearedReason` | `EDITION_DELETED` \| `EDITION_FILE_REMOVED` \| null | `CLEARED` 일 때만 |
+
+`RecommendationEditionRefDTO` — **그때의 표기 스냅샷**이다. 지금 판본을 다시 읽은 값이 아니다(01_ERD §3-13).
+
+| 필드 | 규칙 |
+|---|---|
+| `editionId` | long \| **null** — **판본이 삭제됐으면 null.** 나머지 6개는 스냅샷이라 그대로 남는다 |
+| `kind` / `scope` / `movementNumber` | 그때의 종류·포함 범위 |
+| `publisher` / `editor` / `publishYear` | 그때의 출판사 / 편집자 / 출판 연도. 없던 값은 null(화면이 `–`) |
+
+`auto` 객체 — **지정 시점 값으로 박아 둔 것**이다(기획 06 §1-3). 나중에 IMSLP 다운로드 수가 바뀌어도 **이 값은 바뀌지 않는다.**
+
+| 필드 | 규칙 |
+|---|---|
+| `rule` | `MOST_IMSLP_DOWNLOADS` — 화면이 규칙 한 줄을 그린다 |
+| `imslpDownloadCount` | int \| **null**. **null = "IMSLP 다운로드 수가 적혀 있지 않은 판본이에요"** (화면정의 06 A-1 셋째 줄 둘째 갈래) |
+| `candidateCount` | int. **`1` 이면 화면이 "1위" 라고 쓰지 않는다** → `고를 수 있는 판본이 이것 하나뿐이었어요`(8-A 3) |
+| `rank` | int. 지금 규칙은 언제나 1이지만 값으로 말한다(8-A 2 가 후보 수와 순위를 함께 요구한다) |
+
+**`candidateCount == 1` 과 `imslpDownloadCount == null` 은 서로 다른 분기다** — 화면이 둘을 따로 그린다.
+후보가 1개이면서 다운로드 수도 없는 판본이면 `고를 수 있는 판본이 이것 하나뿐이었어요` 쪽이 이긴다(화면정의 06 A-1 표).
+
+**세 상태를 화면이 가르는 법** (A-1 의 3가지 모양)
+
+| 곡의 상태 | 응답 | 화면 |
+|---|---|---|
+| 추천 있음 + 근거 있음(자동) | `recommendedEditionId != null`, `current.source = AUTO` | A-1 (A) |
+| 추천 있음 + 근거 있음(사람) | 〃 `current.source = ADMIN` | A-1 (B) |
+| **추천 있음 + 기록 없음**(실데이터 42곡) | `recommendedEditionId != null`, `current = null`, `historyCount = 0` | A-1 (C) `기록이 없어요` |
+| 추천 없음 + 이력 있음 | `recommendedEditionId = null`, `current = null`, `historyCount ≥ 1` | 상자 없음 + `▸ 바뀐 이력 (N)` 줄만(화면정의 06 A-0) |
+| 추천 없음 + 이력 없음 | `recommendedEditionId = null`, `current = null`, `historyCount = 0` | 아무것도 없음 |
+
+- **`current` 가 `history[0]` 과 같은 줄인 것은 의도된 중복이다.** 화면이 두 자리(상자 / 이력 맨 위 `지금` pill)에 같은 줄을 그리는데, `history` 가 5줄 상한이라 "현재 줄이 반드시 들어 있다" 를 화면이 계산으로 보장하게 하면 상한을 바꾸는 날 조용히 깨진다. 서버가 한 곳에서 만드는 **같은 객체**라 둘이 어긋날 수 없다.
+- **`recommendation` 을 객체로 묶는 이유**: 상세 응답 루트에 필드 넷을 흩뿌리면 "이 넷이 한 덩어리" 라는 사실이 계약에서 사라지고, 화면마다 다른 조합으로 읽게 된다.
+- **백필이 없다 (기획 06 §5).** 기능 도입 전에 지정된 곡은 `current = null` · `history = []` 가 **정상**이다. 서버가 지금 값으로 근거를 지어내면 8-E 1 이 결함으로 잡는다.
+- 계약 검증: `RecommendationLogIntegrationTest` · `RecommendationAutoEvidenceIntegrationTest` · `RecommendationHistoryApiIntegrationTest`.
+
+### 4-7-1. `GET /api/admin/works/{workId}/recommendation-history` — 바뀐 이력 전부 (2026-09-21 신설)
+
+화면정의 06 A-1 "바뀐 이력" 의 **`더 보기`** 가 부른다. §4-7 은 최근 **5줄**만 싣고, 이 API 가 **전부**를 준다.
+
+**왜 곡 상세를 다시 받지 않나.** 곡 편집(`/admin/works/:id`)은 **작성 중인 폼**이다. 이력 한 줄을 더 보자고 곡 상세를 다시 받으면
+사용자가 치고 있던 제목·별칭이 서버 값으로 덮인다. 이력은 곡 상세와 **수명이 다른 읽기**라 자기 주소를 갖는다.
+
+| 조건 | 결과 |
+|---|---|
+| 비로그인 / USER | 401 / 403 |
+| 곡 없음 | 404 `NOT_FOUND` |
+| 정상 | 200 (아래) |
+
+```json
+{ "data": { "workId": 21, "historyCount": 12, "history": [ RecommendationLogDTO, … ] } }
+```
+
+- 정렬 `decidedAt DESC, id DESC` — **최신이 맨 위**(8-D 1).
+- **상한 200줄.** 넘으면 최신 200줄만 싣고 `historyCount` 는 **실제 전체 수**를 그대로 말한다(화면이 "전부는 아니다" 를 알 수 있어야 한다).
+  근거: 기획 미결 6-3 은 "전부 남기고 화면에는 최근 5줄 + 더 보기" 였고, **남기는 것과 한 번에 보내는 것은 다른 문제**다.
+  42곡 규모에서는 200 에 닿지 않지만, 기획 06 §4-2 의 대량 재지정이 열리면 곡당 줄이 늘 수 있다.
+  상한 없는 배열은 언젠가 응답 하나가 커지고, 그때는 화면이 아니라 서버가 멈춘다. 200 은 §4-2 페이지 상한과 같은 숫자를 쓴다.
+- **보관 기간은 두지 않는다 (미결 6-3 결론 — senior-dev).** 오래된 줄을 지우는 배치를 만들지 않는다.
+  근거: ⑴ 근거를 남기겠다고 시작한 일이 **설명 없이 근거를 지우는 배치**로 끝나면 안 된다 ⑵ 42곡 × 드문 변경이라 양이 작다
+  ⑶ 보관 기간을 두면 "왜 그 줄이 없지?" 라는, 지금 우리가 없애려는 바로 그 질문이 되돌아온다. 줄이 사라지는 유일한 때는 **곡 삭제**다(01_ERD §7).
 
 ### 4-8. `POST /api/admin/works` → 201 / `PUT /api/admin/works/{id}` → 200
 요청 `WorkSaveDTO`
@@ -1026,6 +1170,17 @@ GET /api/works/recent?ids=23,21,999&section=PIANO
 ### 5-5. `DELETE /api/admin/editions/{id}` → 204
 추천이면 곡 추천 해제. 파일·미리보기 삭제. **다운로드 기록(`download_log`)은 지우지 않는다** — `edition_id` 만 비운다(2026-09-08 개정).
 
+> **2026-09-21 — 추천 판본을 지우면 근거 한 줄이 쌓인다 (기획 8-B 7).** 그 판본이 추천이었으면 해제 **전에** `work_recommendation_log` 에
+> `action = CLEARED` · `source = ADMIN` · `decided_by_*` = 토큰 주체 · `cleared_reason = EDITION_DELETED` · `previousEdition` = **지워질 판본의 그때 표기 스냅샷** 한 줄을 넣는다(01_ERD §3-13·§7).
+> 그 뒤 로그 행의 `edition_id`·`previous_edition_id` 는 `download_log` 와 같은 방식으로 **NULL 로 비우고 행과 스냅샷 6개는 남긴다** —
+> 스냅샷이 없으면 이력 줄이 `? → 추천 없음` 이 되어, 관리자가 이 화면에서 던지는 바로 그 질문("어제까지 추천이 있었는데 왜 없지?")에 답하지 못한다.
+> 추천이 **아닌** 판본을 지울 때는 로그를 쌓지 않는다(추천이 정해진 순간이 아니다). 다만 **과거 이력 줄이 그 판본을 가리키고 있었다면** 그 줄의 id 도 NULL 이 된다(스냅샷은 남는다).
+> 계약 검증: `RecommendationLogIntegrationTest`.
+
+> **§5-3 으로 추천 판본의 파일을 떼도 추천이 풀린다 (이미 하던 동작 — 2026-09-21 계약으로 명시).** 그 경로도 `CLEARED` 한 줄을 쌓고
+> `cleared_reason = EDITION_FILE_REMOVED` 다. 기획·화면정의가 언급하지 않은 경로이지만 **코드에 실재한다** — 계약에서 빠뜨리면 그 길로 추천이 빠진 곡만 이력이 비어
+> 8-B 7 이 곡마다 다르게 판정된다. 화면 문구는 designer 확인 대상(§8).
+
 > **왜 바꿨나 (qa 3차 결함 8).** 4번 받은 판본을 지우면 `work.download_count` 는 4로 남는데 `download_log` 는 0행이 됐다.
 > 그래서 **인기곡 정렬(§3-2, `download_count`)** 과 **대시보드 `monthlyDownloads`(§4-1, 로그 수)** 가 같은 달의 같은 사건을 다르게 셌다(실측 13 → 9).
 > **판정: `download_log` 가 원장(사실)이고 `work.download_count` 는 그 합계 캐시다. 그리고 다운로드는 _곡_ 단위 사건이다.**
@@ -1037,27 +1192,116 @@ GET /api/works/recent?ids=23,21,999&section=PIANO
 > 역사를 지워서 순위를 고치면 대시보드가 다시 틀어진다. 계약 검증: `DownloadHistoryRetentionIntegrationTest`.
 
 ### 5-6. `PUT /api/admin/works/{workId}/recommended-edition`
-요청 `{ "editionId": 302 }`
+
+> **2026-09-21 전면 개정 (기획 06 §1-4·§3-1·§3-2·§3-3, 화면정의 06 A-3).** 지정이 **사유를 고르는 자리를 한 번 거친다.**
+> 바뀐 것 넷: ⑴ `reason` **필수**("기타"면 `note` 필수) ⑵ `reviewed` 체크로 **검수를 그 자리에서 완료** ⑶ `warnings` **3종 → 6종**
+> ⑷ 지정이 성공하면 **근거 한 줄이 쌓인다**(01_ERD §3-13). 바뀌지 않은 것: 파일 없는 판본은 400 으로 막히고, **경고는 막지 않는다.**
+
+요청 `RecommendEditionRequest`
+```json
+{ "editionId": 302, "reason": "NOT_THIS_WORK", "note": "앞 추천은 관현악 총보였음", "reviewed": true }
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `editionId` | long | **필수** | 그 곡의 판본이어야 한다 |
+| `reason` | enum `RecommendationReason` | **필수** | 6개 중 하나(아래 표). 없거나 모르는 값이면 저장하지 않는다 |
+| `note` | string ≤ **300** | 선택 | **`reason = OTHER` 면 필수.** 공백만 있으면 없는 것으로 본다(null 로 정규화) |
+| `reviewed` | boolean | 선택(기본 **false**) | `true` 면 지정과 동시에 검수 완료(§5-6-1 을 따로 부르지 않는다). **기본이 false 인 것이 계약이다** — 기본을 true 로 두면 "추천 판본 확인 필요" 가 뜻 없는 항상 0 이 된다(기획 06 §3-3) |
+
+**`reason` 6가지** — 선언 순서가 곧 화면 나열 순서다(화면정의 06 A-3 ③). **문구는 계약에 없다** — 서버는 코드만 주고
+화면이 문구를 갖는다(`RecommendWarning` 과 같은 방식). 근거: 문구는 designer 가 계속 다듬고(기획 06 미결 6-2 는 아직 사람 확정 전),
+서버가 문자열을 박으면 문구 한 글자 수정이 배포가 된다.
+
+| 코드 | 화면 라벨(화면정의 06 A-3 ③ — **화면이 갖는다**) |
+|---|---|
+| `NOT_THIS_WORK` | 앞 추천이 이 곡의 악보가 아니었어요 |
+| `BETTER_READABILITY` | 이 판본이 더 읽기 좋아요 |
+| `BETTER_FOR_LEARNERS` | 이 판본의 편집·운지가 배우는 사람에게 맞아요 |
+| `PREVIOUS_UNAVAILABLE` | 앞 추천은 지금 받을 수 없어요 |
+| `COVERS_WHOLE_WORK` | 이 판본이 곡 전체를 담고 있어요 |
+| `OTHER` | 기타 — 직접 적기 (**메모 필수**) |
+
+- **첫 지정(그 곡에 지금 추천이 없는 곡)에서 화면은 `NOT_THIS_WORK`·`PREVIOUS_UNAVAILABLE` 두 개를 감춘다**(앞 추천이 없는데 "앞 추천이 …" 를 고르면 근거가 거짓이 된다). **계약은 6개 그대로다** — 서버는 첫 지정에서도 여섯 값을 전부 받는다. 화면만 줄인다(화면정의 06 A-3 ③).
+
 | 조건 | 결과 |
 |---|---|
-| 판본이 그 곡의 것이 아님 / 없음 | 404 |
-| 판본에 파일 없음 | 400 `BUSINESS_RULE_VIOLATION` "파일이 없어 추천으로 지정할 수 없어요" |
-| 정상 | 200 `{ "workId": 21, "previousEditionId": 301, "editionId": 302, "workStatus": "UNKNOWN", "warnings": ["NOT_DOWNLOADABLE", "ARRANGEMENT", "PARTIAL_SCOPE"] }` — `warnings` 는 **배열**(2026-09-08 개정) |
+| 비로그인 | 401 `NOT_AUTHENTICATED` |
+| USER 토큰 | 403 `ACCESS_DENIED` |
+| 곡 없음 / 판본 없음 / **그 곡의 판본이 아님** | 404 `NOT_FOUND` |
+| `editionId` 누락 | 400 `VALIDATION_ERROR` field `editionId` `"판본을 선택해 주세요"` |
+| **`reason` 누락** | 400 `VALIDATION_ERROR` field `reason` `"왜 이 판본을 골랐는지 골라 주세요"` |
+| **`reason = OTHER` 인데 `note` 가 비었다** | 400 `VALIDATION_ERROR` field `note` `"왜 이 판본을 골랐는지 적어 주세요"` |
+| `note` 300자 초과 | 400 `VALIDATION_ERROR` field `note` `"300자를 넘을 수 없어요"` (§0-6) |
+| 판본에 파일 없음 | 400 `BUSINESS_RULE_VIOLATION` `"파일이 없어 추천으로 지정할 수 없어요"` |
+| 정상 | 200 (아래) |
 
-**`warnings` — 해당되는 것이 전부 온다 (2026-09-08 개정, 기획 §11-2 ①)**
+- **검증에 걸리면 추천도 근거도 하나도 바뀌지 않는다** (기획 8-B 2·4). 400 을 받은 뒤 곡 상세를 다시 읽으면 `recommendedEditionId` 가 그대로다.
+- **검증 순서는 404 → 400 이다** — 없는 곡/판본에 사유 오류를 말하면 "그 곡이 있다" 는 사실이 새어 나간다(§0-3 과 같은 원칙).
 
-| 값 | 조건 | 화면 문구(기획 §3 F6-3) |
-|---|---|---|
-| `NOT_DOWNLOADABLE` | 지정한 판본의 `koreaCopyright != FREE`(UNKNOWN/RESTRICTED) | "이 판본은 사용자에게 다운로드가 열리지 않아요" |
-| `ARRANGEMENT` | `kind = ARRANGEMENT` | "이 판본은 편곡이에요. 사용자가 원곡 악보를 기대하고 받을 수 있어요" |
-| `PARTIAL_SCOPE` | `scope = MOVEMENT` | "이 판본은 2악장만 들어 있어요. 곡 전체가 아니에요" (악장 번호는 화면이 이미 가진 판본 데이터에서 쓴다) |
+응답 200 `RecommendResult`
+```json
+{ "workId": 21, "previousEditionId": 301, "editionId": 302, "workStatus": "UNKNOWN",
+  "recommendationReviewed": true,
+  "warnings": ["WORK_BECOMES_CLOSED", "HAS_DOWNLOAD_HISTORY", "NOT_DOWNLOADABLE", "PARTIAL_SCOPE"] }
+```
+- `recommendationReviewed`(boolean, **2026-09-21 신설**): 요청의 `reviewed` 가 그대로 반영된 결과. 화면이 A-1 의 미검수 줄을 다시 조회 없이 그린다.
+- `warnings`: **6종 전부**(§5-6-2 표). **지정 직전 상태로 계산한다** — `WORK_BECOMES_CLOSED` 는 "바꾸면 닫힌다" 는 말이라 지정한 뒤에 세면 이미 닫혀 있어 영영 뜨지 않는다. 같은 이유로 §5-6-2(예고)와 **같은 함수**를 쓴다.
+- 같은 판본을 다시 지정해도 200 이다. 다만 **추천이 실제로 바뀌지 않았으므로 근거 줄은 쌓지 않고**(01_ERD §7) 검수 상태도 유지한다(`reviewed: true` 를 보내면 검수만 켜진다).
 
-- **고정 순서** `NOT_DOWNLOADABLE → ARRANGEMENT → PARTIAL_SCOPE`. 해당 없으면 **빈 배열 `[]`** — null 을 내려보내지 않는다(빈 상태는 하나만 둔다).
-- 옛 필드 `warning`(string|null)은 **삭제한다**. 같은 뜻의 필드를 둘 두면 화면마다 다른 걸 읽는다. frontend-dev 는 `data.warning === "NOT_DOWNLOADABLE"` 분기를 `data.warnings.includes(…)` 로 바꾼다.
-- **경고는 막지 않는다** — 200 으로 지정은 끝나 있고 경고는 안내다(기획 §11-2 "경고를 보고도 지정하면 그건 사람의 결정"). 파일 없는 판본만 400 으로 막는다(위 표).
-- 지정의 결과가 사용자에게 드러나는 곳은 세 군데다: 검색 항목 `scopeNote`(§2-2-1) · 곡 상세 `recommendedEdition.kind/scope`(§2-3, 이미 있다) · 다운로드 파일명 접미사(§3-4).
-- 계약 검증: `RecommendEditionWarningIntegrationTest`.
-- **지정·해제는 검수 상태를 초기화한다** — `recommended_edition_reviewed = false`(§5-6-1).
+**근거 한 줄이 쌓인다 (01_ERD §3-13).** 성공한 지정은 같은 트랜잭션에서 `work_recommendation_log` 에 한 줄을 넣는다:
+`source = ADMIN`, `action = ASSIGNED`, `decided_by_*` = **토큰 주체**(요청 본문의 사용자 id 를 쓰지 않는다 — 컨벤션 §4-1),
+`edition_*` = 새 판본의 그때 표기 스냅샷, `previous_*` = 바뀌기 직전 추천의 스냅샷(없으면 전부 NULL = 처음 지정), `reason`·`note`.
+
+- **지정의 결과가 사용자에게 드러나는 곳은 그대로 세 군데다**: 검색 항목 `scopeNote`(§2-2-1) · 곡 상세 `recommendedEdition`(§2-3) · 다운로드 파일명 접미사(§3-4). **근거는 그 어디에도 실리지 않는다**(기획 06 §6 — 1차 제외 확정).
+- 계약 검증: `RecommendEditionWarningIntegrationTest`(경고) · `RecommendReasonIntegrationTest`(사유·메모·검수) · `RecommendationLogIntegrationTest`(근거 기록).
+
+### 5-6-2. `GET /api/admin/works/{workId}/recommended-edition/preview?editionId=302` — 바꾸기 전 경고 예고 (2026-09-21 신설)
+
+화면정의 06 A-3 의 "이 판본으로 바꾸기" 패널은 **바꾸기 전에** 경고를 읽는다. 그런데 경고 ④⑤는 판본의 성질이 아니라
+**이 변경의 결과**라, 판본 행의 값만으로는 판정할 수 없다(곡의 지금 상태 + 그 곡의 다운로드 기록 유무가 필요하다).
+
+**왜 화면이 직접 계산하지 않나.** 그러면 경고 규칙이 서버(§5-6 응답)와 화면 두 곳에 살게 되고, **예고와 결과가 어긋날 수 있다.**
+같은 문제를 §5-8 `autoJudgeSkipReason` 에서 이미 겪었고 "예고는 결과와 같은 함수여야 한다" 로 닫았다(03 §16).
+추천 변경은 사용자가 받는 파일을 바꾸는 동작이라 예고가 틀리면 안 된다.
+
+| 쿼리 | 값 |
+|---|---|
+| `editionId` | **필수**. 그 곡의 판본 |
+
+| 조건 | 결과 |
+|---|---|
+| 비로그인 / USER | 401 / 403 |
+| `editionId` 누락 | 400 `MISSING_PARAMETER` |
+| 곡·판본 없음 / 그 곡의 판본이 아님 | 404 `NOT_FOUND` |
+| 판본에 파일 없음 | **200** — 예고는 읽기다. 막는 것은 §5-6 의 일이고, 읽기를 게이트로 쓰면 "왜 못 보는지" 를 화면이 또 설명해야 한다 |
+| 정상 | 200 (아래) |
+
+```json
+{ "data": { "workId": 21, "editionId": 302,
+  "warnings": ["WORK_BECOMES_CLOSED", "HAS_DOWNLOAD_HISTORY", "NOT_DOWNLOADABLE", "PARTIAL_SCOPE"] } }
+```
+
+**`warnings` — 경고 6종 (2026-09-21, 기획 06 §3-2 / 화면정의 06 A-3 ②-1)**
+
+| 순서 | 값 | 조건 | 묶음(화면) | 화면 문구 — **화면이 갖는다** |
+|:---:|---|---|---|---|
+| ④ | `WORK_BECOMES_CLOSED` | **지금 이 곡이 `READY`** 인데 지정할 판본의 `koreaCopyright != FREE` | 바뀌면 생기는 일 | 지금 받을 수 있는 곡이에요 — 바꾸면 이 곡의 다운로드가 닫혀요 |
+| ⑤ | `HAS_DOWNLOAD_HISTORY` | **이 곡에 다운로드 기록이 있다**(§4-7 `hasDownloadHistory`) | 바뀌면 생기는 일 | 이미 이 곡을 받아 간 사람이 있어요 — … |
+| ① | `NOT_DOWNLOADABLE` | 지정할 판본의 `koreaCopyright != FREE` | 이 판본은 이런 판본이에요 | 이 판본은 저작권이 '…' 이라 사용자에게 다운로드가 열리지 않아요 |
+| ⑥ | `PARTS` | `kind = PARTS` | 〃 | 이 판본은 한 악기 파트만 담고 있어요 — … |
+| ② | `ARRANGEMENT` | `kind = ARRANGEMENT` | 〃 | 이 판본은 편곡이에요 — … |
+| ③ | `PARTIAL_SCOPE` | `scope = MOVEMENT` | 〃 | 이 판본은 {N}악장만 들어 있어요 — … |
+
+- **고정 순서** `WORK_BECOMES_CLOSED → HAS_DOWNLOAD_HISTORY → NOT_DOWNLOADABLE → PARTS → ARRANGEMENT → PARTIAL_SCOPE`
+  (= 화면정의 06 A-3 ② "순서 고정 ④ → ⑤ → ① → ⑥ → ② → ③"). 해당 없으면 **빈 배열 `[]`**, null 이 아니다.
+  - 기존 3종의 상대 순서(`NOT_DOWNLOADABLE → ARRANGEMENT → PARTIAL_SCOPE`)는 **바뀌지 않는다**. `PARTS` 가 사이에 끼지만 `PARTS`·`ARRANGEMENT` 는 `kind` 가 하나뿐이라 **동시에 성립할 수 없다**.
+- **한 번에 최대 5줄이다. 6줄은 불가능하다** — ②와 ⑥이 상호 배타이기 때문. 화면은 이 상한을 전제로 그린다(화면정의 06 A-3 ②).
+- **④가 뜨면 ①은 반드시 뜬다** — ④의 조건이 ①의 조건을 포함한다(④ ⊂ ①). **둘 다 보낸다**(기획 8-C 2): ①은 판본의 성질, ④는 이 변경의 결과이고, 관리자가 판단에 쓰는 것은 후자다.
+- **곡이 지금도 닫혀 있으면 ④는 뜨지 않는다** — 닫힌 것을 닫을 수는 없다.
+- **⑤에 사람 수·건수를 담지 않는다** — 판단은 0이냐 1 이상이냐에서 갈린다(기획 06 §3-2). 기록이 없는 곡에는 이 값이 **아예 없다**.
+- **⑥은 실데이터에 사례가 없을 수 있다**(피아노 독주곡에 파트보는 거의 없다). 그래도 계약에 두는 이유는 ②③과 정확히 같은 종류의 사고이기 때문이다 — 사용자가 기대한 것과 다른 것을 받는다.
+- 계약 검증: `RecommendChangePreviewIntegrationTest`.
 
 ### 5-6-1. `PUT /api/admin/works/{workId}/recommended-edition/review` — 추천 판본 확인함 (2026-09-08 신설)
 
@@ -1080,6 +1324,16 @@ GET /api/works/recent?ids=23,21,999&section=PIANO
   "그 판본" 이 아니라 "지금 추천" 이다. 곡의 다른 필드 수정(§4-8)으로는 바뀌지 않는다.
 - 보이는 곳: §4-1 카드 `needsRecommendationReviewWorks` · §4-6 필터 `status=NEEDS_RECOMMENDATION_REVIEW` ·
   §4-6 목록/§4-7 상세의 `recommendationReviewed`.
+- **2026-09-21 개정 (기획 06 §3-3, `01` §15-3)** — 검수를 켜는 길이 둘이 됐다:
+  ⑴ **§5-6 의 `reviewed: true`** — 관리자가 미리보기를 보고 고른 그 자리에서 함께 완료. 체크하지 않으면(기본 false) 지금과 같이 미검수로 남는다.
+  ⑵ **이 API** — 자동 지정된 추천을 확인하는 유일한 길(그 곡은 지정 요청 자체가 없었다). **없앨 수 없다.**
+  두 길이 같은 컬럼 하나를 쓴다. 지정과 검수를 한 번의 왕복으로 끝내는 것이 ⑴ 의 전부이고, 계약이 갈라지지 않는다.
+- **`reviewed: false`(확인 해제) 경로는 유지한다 (2026-09-21 판정 — 화면정의 06 D4 회신, senior-dev).**
+  화면정의는 "되돌릴 일은 다시 지정으로 해결된다" 며 버튼을 두지 않으려 했는데, **이번 개정으로 그 근거가 성립하지 않는다**:
+  ⓐ 같은 판본을 다시 지정하면 추천이 바뀌지 않아 **검수가 유지된다**(01_ERD §7) — 즉 다시 지정으로는 풀 수 없다.
+  ⓑ 다른 판본을 지정해 푸는 것은 **추천을 실제로 바꾸는 일**이고, 이제 **사유가 필수**라 있지도 않은 사유를 남기게 된다 —
+  근거를 남기려고 만든 기능이 **거짓 근거**를 만들면 안 된다.
+  그래서 계약도 화면의 `확인 해제` 버튼도 **그대로 둔다**. designer 에게 화면정의 A-1 의 그 줄을 되돌려 준다(§8).
 - 계약 검증: `RecommendationReviewIntegrationTest`.
 
 ### 5-7. `POST /api/admin/editions/{id}/fetch-file` — IMSLP 파일 받아오기(비동기)
@@ -1284,6 +1538,25 @@ API 는 살아 있는데 **화면 진입점이 없는 상태**이고, 8084 실�
 > 왜 같은 API 에 넣는가: 판정만 하면 `recommendedEditionId` 가 없어 곡이 계속 `PREPARING` 이라 **다운로드 가능한 곡은 여전히 0개**다.
 > 두 단계를 따로 두면 관리자가 절반만 실행한 상태가 생긴다. 다만 관리자가 추천을 손으로 관리하고 싶을 수 있으니 끌 수 있는 스위치로 둔다.
 
+**자동 지정도 근거 한 줄을 남긴다 (2026-09-21, 기획 06 §1-3 · 8-D 3 · 8-F 5).** 지정한 곡마다 `work_recommendation_log` 에 한 줄(01_ERD §3-13):
+
+| 컬럼 | 값 |
+|---|---|
+| `source` / `action` | `AUTO` / `ASSIGNED` |
+| `decided_by_user_id` · `decided_by_nickname` | **NULL** — 사람이 아니다. 화면 1단은 `자동` |
+| `auto_rule` | `MOST_IMSLP_DOWNLOADS` |
+| `auto_imslp_download_count` | **지정한 그 판본의 `imslp_download_count` 를 그 순간 읽은 값.** 값이 없던 판본이면 **NULL** |
+| `auto_candidate_count` | **그 순간 그 곡의 후보 수**(위 조건을 만족한 판본 수). 정렬 전 집합의 크기 |
+| `auto_rank` | `1` (지금 규칙은 언제나 1위를 고른다) |
+| `previous_*` | 전부 NULL — 자동 지정은 **추천이 없는 곡에만** 걸리므로 항상 첫 지정이다 |
+
+- **"그때 그 값" 이 계약의 핵심이다 (기획 06 §1-3).** 근거를 보여줄 때 IMSLP 다운로드 수·후보 수를 **다시 읽어 계산하면 안 된다** —
+  그건 그때의 판단을 설명하는 것이 아니라 오늘 다시 낸 답이다. 그래서 세 숫자를 지정 시점에 **박아 둔다.**
+  검증: `RecommendationAutoEvidenceIntegrationTest` 가 지정 뒤에 판본의 `imslpDownloadCount` 를 바꾸고도 근거가 그대로인지 본다.
+- **후보가 1개였던 것과 다운로드 수가 없던 것은 서로 다른 사실이다** — 화면이 별도 분기로 그린다(§4-7-2). `auto_candidate_count = 1` 과 `auto_imslp_download_count = null` 이 각각 구분 가능해야 한다.
+- **`dryRun` 이면 줄도 쌓지 않는다** — dryRun 은 엔티티 변경 메서드를 아예 부르지 않는 방식이다(03 §16). 로그도 같은 규칙을 따른다.
+- **이 실행으로 지정된 추천에는 근거가 함께 남는다**(기획 8-F 5). 반대로 **이미 추천이 있던 곡(실데이터 42곡)은 후보 조회에서 빠지므로 근거가 생기지 않는다** — 8-E 1 이 그것을 확인한다.
+
 응답 200
 ```json
 { "data": {
@@ -1330,6 +1603,9 @@ API 는 살아 있는데 **화면 진입점이 없는 상태**이고, 8084 실�
 - **추천 판본 지정은 되돌리지 않는다.** 추천은 유지되지만 그 판본이 `UNKNOWN` 이 되므로 곡 상태는 즉시 `UNKNOWN`
   (01_ERD §4 계산) → **다운로드는 그 순간 닫힌다.** 되돌리기의 목적(위험 차단)은 판정만 되돌려도 100% 달성되고,
   추천까지 지우면 관리자가 손으로 지정한 추천과 자동 지정을 구분할 수 없어(구분용 컬럼이 없다) 사람 작업을 지운다.
+- **근거·이력을 하나도 건드리지 않는다 (2026-09-21, 기획 8-D 4 · `01` §15-7).** 이 API 는 추천을 건드리지 않으므로 `work_recommendation_log` 에
+  줄을 더하지도 지우지도 고치지도 않는다. 되돌린 뒤 §4-7 의 `recommendation` 은 실행 전과 **한 글자도 같아야** 한다 — 달라지면 결함이다.
+  (qa 가 "되돌렸는데 근거가 남아 있다" 를 결함으로 보지 않도록 계약으로 못 박는다. 검증: `RecommendationAutoEvidenceIntegrationTest`.)
 - 되돌릴 것이 없어도 200 `{ "reverted": 0 }`(에러 아님).
 - **버튼이 언제 보이는가는 이 응답이 아니라 §5-8-1 `autoJudged` 가 정한다** (2026-09-09, qa 5차 결함 1).
   이 API 를 부를 수 있는지를 화면이 "방금 실행했다" 는 기억으로 판단하면 새로고침 한 번에 진입점이 사라진다.
@@ -1540,7 +1816,7 @@ harpsichord/keyboard 로 분류하는데, 인벤션·평균율·안나 막달레
 |---|---|
 | 홈 | `GET /api/works/popular?limit=10`, `GET /api/composers/featured?limit=8` (독립 요청, 각각 실패 처리) |
 | 검색 결과 | `GET /api/works/search?q&level&pages&downloadable&page` — URL 쿼리 그대로 전달. 0건 화면의 인기곡 5개는 `popular?limit=5` |
-| 곡 상세 | `GET /api/works/{id}` 1회(같은 작곡가 곡 포함). 다운로드는 `<a href={downloadUrl} download>` — **fetch 로 blob 받지 않는다**(큰 파일 메모리·진행 표시 없음). **실패 감지: 클릭할 때 같은 주소로 `HEAD` 를 한 번 보내고(§3-4), 응답이 실패거나 네트워크 오류면 버튼 아래 InlineAlert danger** (2026-09-07 변경 — 이전의 "10초 자동 복귀" 로는 실패를 알 수 없어 인수조건이 구현되지 않았다. 03 §13) |
+| 곡 상세 | `GET /api/works/{id}` 1회(같은 작곡가 곡 포함). 다운로드는 `<a href={downloadUrl} download>` — **fetch 로 blob 받지 않는다**(큰 파일 메모리·진행 표시 없음). **실패 감지: 클릭할 때 같은 주소로 `HEAD` 를 한 번 보내고(§3-4), 응답이 실패거나 네트워크 오류면 버튼 아래 InlineAlert danger** (2026-09-07 변경 — 이전의 "10초 자동 복귀" 로는 실패를 알 수 없어 인수조건이 구현되지 않았다. 03 §12) **2026-09-21 — 이 클릭 처리는 공용 훅 `useDownloadStart`(03 §28) 하나다. 내 악보 "다시 받기" 와 같은 코드를 쓴다: 진행 중 `aria-disabled`, 재클릭은 HEAD 를 더 보내지 않으며, 클릭 후 10초가 지나면 잠금만 풀고(실패로 치지 않는다) 늦게 온 응답은 버린다.** |
 | 작곡가 목록 / 상세 | `GET /api/composers` / `GET /api/composers/{id}` + `GET /api/composers/{id}/works?sort&…` |
 | 관리 홈 | `GET /api/admin/dashboard` |
 | 관리 띠(AdminBanner) | `GET /api/admin/crawl/jobs/active` 를 관리 화면 진입 시 + 30초 간격 |
@@ -1722,7 +1998,8 @@ receivedDownloadable                                    → RECOMMENDATION_CHANG
 - 정렬 **`last_downloaded_at DESC, id DESC`**. 숨김 곡 제외, 그 구분만. `counts.downloads` 는 이 응답 `items.totalElements` 와 항상 같다.
 - **페이지 범위 밖은 200 + 빈 `content`** — §10-2 와 한 글자도 다르지 않다(§0-4 공통 규칙). `page` 가 `2147483647` 이어도 200 이고, `counts`·`items.totalElements` 는 그대로 실제 수다. 검증 `MyLibraryPageBoundsIntegrationTest`.
 - **"다시 받기" 성공을 화면이 아는 수단(09 §6 S7)**: 곡 상세와 **같은 방식**이다 — `<a href download>` + 같은 주소로 `HEAD` 한 번(§3-4). 200 이면 화면이 그 줄의 날짜를 `오늘 받음` 으로 바꾸고, 실패면 그 항목 아래 안내를 띄운다(09 §1-2-1). **계약은 한 줄도 늘지 않는다**(전용 "다시 받기" 엔드포인트를 만들지 않는다 — 다운로드 문이 둘이 되면 저작권 게이트도 둘이 된다).
-- 계약 검증: `MyLibraryDownloadApiIntegrationTest`, `MyLibraryPage.downloads.test.jsx`.
+  - **2026-09-21 — 같은 방식이라는 말은 곧 같은 코드다**: 두 화면 모두 공용 훅 `useDownloadStart`(03 §28)를 쓴다. 진행 표시(스피너·`aria-disabled`)·재클릭 차단·10초 잠금 해제가 두 화면에서 같고, **클릭 후 10초가 지나 도착한 200 은 버린다** — 그 시점에 날짜를 `오늘 받음` 으로 바꾸면 사용자가 손을 뗀 목록이 혼자 움직인다.
+- 계약 검증: `MyLibraryDownloadApiIntegrationTest`, `MyLibraryPage.downloads.test.jsx`, `MyLibraryPage.downloadProgress.test.jsx`.
 
 ### 10-4. 화면 주소 · 로그인 "이유" 쿼리 — **확정** (화면정의 09 §6 S1·S2, 00 §8)
 
@@ -1752,3 +2029,35 @@ receivedDownloadable                                    → RECOMMENDATION_CHANG
 - 즐겨찾기 개수 상한 — **두지 않는다**(기획 05 §10 8-5 의 senior-dev 몫을 여기서 닫는다. 근거는 01_ERD §3-11).
 - 최근 본 곡의 계정 동기화 — 기획 05 §0-3 제외. 저장은 브라우저뿐이다(03 §23).
 - 회원가입 경유 복귀·마이페이지 정비 — 기획 05 §10 8-4·8-8(사용자 작업 ④).
+
+---
+
+## 11. 추천 판본 "왜 이 판본인가" — 확정·되돌림 (2026-09-21 senior-dev)
+
+> 기획 `06_추천판본_선정근거와_변경_기획서.md` · 화면정의 `06_관리자_판본관리.md` A-0~A-3 을 계약으로 옮기면서
+> 내린 결정과, 다른 담당에게 되돌리는 것을 한 자리에 모았다. 절 본문은 §4-6 · §4-7-2 · §4-7-1 · §5-5 · §5-6 · §5-6-1 · §5-6-2 · §5-11 · §5-12.
+
+### 11-1. senior-dev 가 닫은 미결 (기획 §9 · 화면정의 "이 문서가 남긴 미정")
+
+| # | 항목 | 결론 | 근거가 적힌 곳 |
+|---|---|---|---|
+| 기획 6-3 / D2 | **이력 보관 기간·분량** | **보관 기간 없음**(지우는 배치를 만들지 않는다. 줄이 사라지는 유일한 때는 곡 삭제). **응답 분량은 곡 상세 5줄 + `hasMore`, "더 보기" 는 전용 API 로 최대 200줄** | §4-7-1 · §4-7-2 |
+| D3 | **메모 길이 상한** | **300자.** 저작권 판정 메모(1000)를 따르지 않는다 — 그쪽은 법적 근거를 **문장**으로 남기는 자리라 2줄 textarea 이고, 이 메모는 designer 가 **한 줄 input** 으로 확정한 "꼬리표"다(화면정의 06 A-3 ④). 한 줄 칸에 1000자 상한은 화면과 어긋난 약속이다. 300 은 `imslp_description`·`file_fetch_error` 와 같은 계열 | §0-6 · §5-6 |
+| D4 | **`reviewed:false` 경로를 화면이 안 쓴다** | **계약도 버튼도 유지한다.** 이번 개정으로 "다시 지정으로 풀면 된다" 가 성립하지 않게 됐다(같은 판본 재지정은 검수를 유지하고, 다른 판본 지정은 **거짓 사유**를 남기게 된다) | §5-6-1 |
+| D5 | **추천 "해제" 전용 API 가 없다 — 8-B 7 의 "해제" 를 판본 삭제로 읽어도 되나** | **읽어도 된다. 해제 전용 API 를 만들지 않는다.** 추천이 빠지는 길은 셋이고 **전부 근거를 남긴다**: ⑴ 다른 판본 지정(§5-6, `ASSIGNED` 줄) ⑵ 추천 판본 삭제(§5-5, `CLEARED`/`EDITION_DELETED`) ⑶ **추천 판본에서 파일 떼기**(§5-3, `CLEARED`/`EDITION_FILE_REMOVED`). 전용 버튼을 새로 만들면 "해제도 판단" 이므로 사유를 묻는 자리를 하나 더 설계해야 하고, 그건 기획 §0-4 의 1차 포함 목록에 없다 | §5-5 · 01_ERD §3-13 |
+
+### 11-2. designer 에게 되돌리는 것 (2건)
+
+| # | 무엇 | 왜 |
+|---|---|---|
+| S1 | **화면정의 06 A-1 "확인 해제 버튼은 두지 않는다" 줄을 되돌린다** — 버튼을 **유지**해 주세요(지금 코드에도 있다) | 위 D4. 이번 개정이 그 줄의 근거를 무너뜨렸다. 이 줄을 그대로 두면 frontend-dev 가 버튼을 지우고, 잘못 누른 "확인함" 을 푸는 길이 **거짓 사유를 남기는 길 하나만** 남는다 |
+| S2 | **추천이 빠지는 세 번째 길에 문구가 없다** — `CLEARED` / `EDITION_FILE_REMOVED`(§5-3 으로 추천 판본의 파일을 떼면 추천이 풀린다. **이미 그렇게 동작한다**). 화면정의 A-1 "바뀐 이력" 표는 `추천을 뺐어요 — 판본 삭제` 한 가지만 정의했다 | 계약에는 값이 있고 화면에는 문구가 없으면 그 줄이 빈칸으로 그려진다. 제안 문구: `추천을 뺐어요 — 판본에서 파일을 뗐어요` |
+
+### 11-3. 이번 계약에서 **하지 않은** 것
+
+- **사용자 응답은 한 필드도 바뀌지 않는다** (기획 06 §6 — 1차 제외 확정). `WorkDetailDTO`·`WorkSummaryDTO`·`EditionDTO`·다운로드·검색·인기곡·작곡가·내 악보 **전부 그대로**다. 근거를 사용자 API 로 흘리지 않는다. 회귀 가드: `RecommendationHistoryApiIntegrationTest` 의 "사용자 응답에 근거가 없다".
+- **자동 선택 규칙 자체를 바꾸지 않는다** (기획 §4 · §9 6-1). `MOST_IMSLP_DOWNLOADS` 하나이고 §5-11 의 후보 조건·정렬은 한 글자도 건드리지 않았다 — 바꾸면 실데이터 42곡의 추천이 통째로 흔들린다.
+- **관리 홈(§4-1)에 카드·숫자를 더하지 않는다** (기획 §2-3, 8-A 8).
+- **"근거 없는 곡" 필터를 만들지 않는다** — `status` 값이 늘지 않는다(8-E 4).
+- **백필을 하지 않는다** (기획 §5). 마이그레이션은 "새로 생기는 것을 담을 자리" 하나뿐이고, 그것도 순수 추가형이라 손으로 실행할 것이 없다(01_ERD §9).
+- **"이전 추천으로 되돌리기" 전용 API 를 만들지 않는다** (기획 §3-5). 되돌리는 것도 판단이라 §5-6 의 사유를 거쳐야 한다.

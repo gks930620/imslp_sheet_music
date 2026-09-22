@@ -583,6 +583,8 @@ export function adminWorkDetail(overrides = {}) {
     candidateEditionId: null,
     // §4-7 · §5-6-1 — 추천이 바뀌거나 해제되면 서버가 false 로 되돌린다. 요약 픽스처와 같은 값.
     recommendationReviewed: false,
+    // §4-7-2 — 추천·기록이 없어도 객체는 항상 있다. 기본은 "기록 없음"(실데이터 42곡의 정상 상태).
+    recommendation: { current: null, historyCount: 0, history: [], hasMore: false },
     downloadCount: 312,
     hasDownloadHistory: true,
     editions: [adminEditionRecommended],
@@ -643,4 +645,84 @@ export function pendingCopyrightResponse({
   totalElements = editions.length,
 } = {}) {
   return { unfilteredTotal, autoJudged, editions: pageResponse(editions, { page, totalElements }) };
+}
+
+// ===== §4-7-2 추천 근거 · 바뀐 이력 (2026-09-21) =====
+
+/** §4-7-2 RecommendationEditionRefDTO — <b>그때의 표기 스냅샷</b>. 판본이 지워졌으면 editionId 만 null 이다. */
+export function recommendationEditionRef(overrides = {}) {
+  return {
+    editionId: 301,
+    kind: "COMPLETE_SCORE",
+    scope: "COMPLETE",
+    movementNumber: null,
+    publisher: "Breitkopf",
+    editor: "Lebert",
+    publishYear: 1862,
+    ...overrides,
+  };
+}
+
+/** §4-7-2 RecommendationLogDTO — 자동으로 골랐을 때 (auto 가 채워지고 reason·이름은 null) */
+export function autoRecommendationLog(overrides = {}) {
+  return {
+    id: 40,
+    decidedAt: "2026-09-07T05:20:00Z",
+    source: "AUTO",
+    action: "ASSIGNED",
+    decidedByNickname: null,
+    edition: recommendationEditionRef(),
+    previousEdition: null,
+    auto: { rule: "MOST_IMSLP_DOWNLOADS", imslpDownloadCount: 1204, candidateCount: 3, rank: 1 },
+    reason: null,
+    note: null,
+    clearedReason: null,
+    ...overrides,
+  };
+}
+
+/** §4-7-2 RecommendationLogDTO — 사람이 골랐을 때 */
+export function adminRecommendationLog(overrides = {}) {
+  return {
+    id: 91,
+    decidedAt: "2026-09-20T02:02:00Z",
+    source: "ADMIN",
+    action: "ASSIGNED",
+    decidedByNickname: "창희",
+    edition: recommendationEditionRef({ editionId: 302, publisher: "Peters", editor: "Köhler", publishYear: 1880 }),
+    previousEdition: recommendationEditionRef(),
+    auto: null,
+    reason: "NOT_THIS_WORK",
+    note: "앞 추천은 관현악 총보였음",
+    clearedReason: null,
+    ...overrides,
+  };
+}
+
+/** §4-7-2 RecommendationLogDTO — 추천이 빠진 줄 (edition 은 null, previous 스냅샷만 남는다) */
+export function clearedRecommendationLog(overrides = {}) {
+  return {
+    id: 92,
+    decidedAt: "2026-09-21T01:10:00Z",
+    source: "ADMIN",
+    action: "CLEARED",
+    decidedByNickname: "창희",
+    edition: null,
+    previousEdition: recommendationEditionRef({ editionId: null, publisher: "Peters", editor: "Köhler", publishYear: 1880 }),
+    auto: null,
+    reason: null,
+    note: null,
+    clearedReason: "EDITION_DELETED",
+    ...overrides,
+  };
+}
+
+/**
+ * §4-7-2 `recommendation` 객체. 인자를 주지 않으면 <b>기록 없음</b>(실데이터 42곡의 정상 상태)이다.
+ * `current` 를 주면 history 는 기본으로 그 한 줄이 된다 — current 는 history[0] 과 같은 줄이라는 계약(§4-7-2).
+ */
+export function recommendationBlock({ current = null, history, historyCount, hasMore } = {}) {
+  const lines = history ?? (current ? [current] : []);
+  const count = historyCount ?? lines.length;
+  return { current, historyCount: count, history: lines, hasMore: hasMore ?? count > lines.length };
 }
